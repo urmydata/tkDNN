@@ -20,20 +20,10 @@ Network::Network(dataDim_t input_dim) {
     dontLoadWeights = false;
     num_layers = 0;
 
-    fp16 = false;
+    fp16 = true;
     dla = false;
     int8 = false;
-    if(const char* env_p = std::getenv("TKDNN_MODE")) {
-        if(strcmp(env_p, "FP16") == 0)
-            fp16 = true;
-        else if(strcmp(env_p, "DLA") == 0) {
-            dla = true;
-            fp16 = true;	
-        }
-        else if(strcmp(env_p, "INT8") == 0) {
-            int8 = true;
-        }
-    }
+
     maxBatchSize = 1;
     if(const char* env_p = std::getenv("TKDNN_BATCHSIZE")) {
         maxBatchSize = atoi(env_p);

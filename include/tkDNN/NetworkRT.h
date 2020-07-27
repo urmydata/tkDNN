@@ -72,7 +72,7 @@ public:
     cudaStream_t stream;
 
     PluginFactory *pluginFactory;
-
+	NetworkRT(Network *net, const char *name, int start_index, int end_index, int dla_core, Dims3 inputdm, DataType inputdt);
     NetworkRT(Network *net, const char *name);
     virtual ~NetworkRT();
 
@@ -115,6 +115,7 @@ public:
     bool serialize(const char *filename);
     bool deserialize(const char *filename);
 };
+
 
 }}
 #endif //NETWORKRT_H

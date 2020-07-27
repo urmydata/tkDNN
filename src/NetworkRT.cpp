@@ -16,15 +16,195 @@ using namespace nvinfer1;
 // Logger for info/warning/errors
 class Logger : public ILogger {
     void log(Severity severity, const char* msg) override {
-#ifdef DEBUG
+//#ifdef DEBUG
         std::cout <<"TENSORRT LOG: "<< msg << std::endl;
-#endif
+//#endif
     }
 } loggerRT;
 
 namespace tk { namespace dnn {
 
 std::map<Layer*, nvinfer1::ITensor*>tensors; 
+
+NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_index, int dla_core, Dims3 inputdm, DataType inputdt)
+{
+    float rt_ver = float(NV_TENSORRT_MAJOR) + 
+                   float(NV_TENSORRT_MINOR)/10 + 
+                   float(NV_TENSORRT_PATCH)/100;
+    std::cout<<"New NetworkRT (TensorRT v"<<rt_ver<<")\n";
+  
+    builderRT = createInferBuilder(loggerRT);
+    std::cout<<"Float16 support: "<<builderRT->platformHasFastFp16()<<"\n";
+    std::cout<<"Int8 support: "<<builderRT->platformHasFastInt8()<<"\n";
+#if NV_TENSORRT_MAJOR >= 5
+    std::cout<<"DLAs: "<<builderRT->getNbDLACores()<<"\n";
+#endif
+    networkRT = builderRT->createNetwork();
+#if NV_TENSORRT_MAJOR >= 6                
+	configRT = builderRT->createBuilderConfig();
+#endif
+
+    if(!fileExist(name)) {
+#if NV_TENSORRT_MAJOR >= 6                
+        // Calibrator life time needs to last until after the engine is built.
+        std::unique_ptr<IInt8EntropyCalibrator> calibrator;
+
+        configRT->setAvgTimingIterations(1);
+        configRT->setMinTimingIterations(1);
+        configRT->setMaxWorkspaceSize(1 << 30);
+        configRT->setFlag(BuilderFlag::kDEBUG);
+#endif
+
+    dataDim_t dim = net->layers[0]->input_dim;
+    dtRT = DataType::kFLOAT;
+
+	builderRT->setMaxBatchSize(net->maxBatchSize);
+    builderRT->setMaxWorkspaceSize(1 << 30);
+
+	if(net->fp16 && builderRT->platformHasFastFp16()) {
+			dtRT = DataType::kHALF;
+			builderRT->setHalf2Mode(true);
+#if NV_TENSORRT_MAJOR >= 6                
+			configRT->setFlag(BuilderFlag::kFP16);
+#endif
+	}
+#if NV_TENSORRT_MAJOR >= 5
+	if(net->dla && builderRT->getNbDLACores() > 0) {
+			dtRT = DataType::kHALF;
+			//builderRT->setFp16Mode(true);
+			//builderRT->allowGPUFallback(true);
+			//builderRT->setDefaultDeviceType(DeviceType::kDLA);
+			//builderRT->setDLACore(0);
+            configRT->setDefaultDeviceType(DeviceType::kDLA);
+            configRT->setDLACore(dla_core);
+			configRT->setFlag(BuilderFlag::kGPU_FALLBACK);
+	}
+#endif
+#if NV_TENSORRT_MAJOR >= 6                
+        if(net->int8 && builderRT->platformHasFastInt8()){
+            // dtRT = DataType::kINT8;
+            // builderRT->setInt8Mode(true);
+            configRT->setFlag(BuilderFlag::kINT8);
+            BatchStream calibrationStream(dim, 1, 100,      //TODO: check if 100 images are sufficient to the calibration (or 4951) 
+                                            net->fileImgList, net->fileLabelList);
+            
+            /* The calibTableFilePath contains the path+filename of the calibration table.
+             * Each calibration table can be found in the corresponding network folder (../Test/*).
+             * Each network is located in a folder with the same name as the network.
+             * If the folder has a different name, the calibration table is saved in build/ folder.
+             */
+            std::string calib_table_name = net->networkName + "/" + net->networkNameRT.substr(0, net->networkNameRT.find('.')) + "-calibration.table";
+            std::string calib_table_path = net->networkName;
+            if(!fileExist((const char *)calib_table_path.c_str()))
+                calib_table_name = "./" + net->networkNameRT.substr(0, net->networkNameRT.find('.')) + "-calibration.table";
+
+            calibrator.reset(new Int8EntropyCalibrator(calibrationStream, 1, 
+                                            calib_table_name, 
+                                            "data"));
+            configRT->setInt8Calibrator(calibrator.get());
+        }
+#endif
+
+
+	ITensor *input;
+	// input = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ dim.c, dim.h, dim.w });
+	input = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ inputdm.d[0], inputdm.d[1], inputdm.d[2] });
+	checkNULL(input);
+
+	//add other layers
+	for(int i=0; i<net->num_layers; i++) {
+			if(i < start_index) {
+				continue;
+			}
+			Layer *l = net->layers[i];
+			ILayer *Ilay = convert_layer(input, l);
+			if (builderRT->canRunOnDLA(Ilay) == true) {
+				std::cout << "DLA layer: " << i << ", name: " << l->getLayerName() << std::endl;
+				builderRT->setDeviceType(Ilay, DeviceType::kDLA);	
+			}
+			else
+			{
+				std::cout << "GPU layer: " << i << ", name: " << l->getLayerName() << std::endl;
+			}
+			Ilay->setName( (l->getLayerName() + std::to_string(i)).c_str() );
+
+			std::cout << "layer: " << i << ", name: " << l->getLayerName() << std::endl;
+
+			input = Ilay->getOutput(0);
+			input->setName( (l->getLayerName() + std::to_string(i) + "_out").c_str() );
+
+			if(l->final)
+				networkRT->markOutput(*input);
+			tensors[l] = input;
+
+			if(end_index == i)
+			{
+					break;
+			}
+	}
+	if(input == NULL)
+			FatalError("conversion failed");
+
+	//build tensorRT
+	input->setName("out");
+	networkRT->markOutput(*input);
+
+	std::cout<<"Selected maxBatchSize: "<<builderRT->getMaxBatchSize()<<"\n";
+	printCudaMemUsage();
+	std::cout<<"Building tensorRT cuda engine...\n";
+#if NV_TENSORRT_MAJOR >= 6                
+	engineRT = builderRT->buildEngineWithConfig(*networkRT, *configRT);
+#else 
+	engineRT = builderRT->buildCudaEngine(*networkRT);
+#endif
+    if(engineRT == nullptr)
+        FatalError("cloud not build cuda engine")
+    std::cout<<"serialize net\n";
+    serialize(name);
+    } 
+    deserialize(name);
+
+	/*
+    std::cout<<"create execution context\n";
+	contextRT = engineRT->createExecutionContext();
+	*/
+
+// input and output buffer pointers that we pass to the engine - the engine requires exactly IEngine::getNbBindings(),
+	std::cout<<"Input/outputs numbers: "<<engineRT->getNbBindings()<<"\n";
+    if(engineRT->getNbBindings() > MAX_BUFFERS_RT)
+        FatalError("over RT buffer array size");
+
+	// In order to bind the buffers, we need to know the names of the input and output tensors.
+	// note that indices are guaranteed to be less than IEngine::getNbBindings()
+	buf_input_idx = engineRT->getBindingIndex("data"); 
+    buf_output_idx = engineRT->getBindingIndex("out");
+    std::cout<<"input idex = "<<buf_input_idx<<" -> output index = "<<buf_output_idx<<"\n";
+
+
+    Dims iDim = engineRT->getBindingDimensions(buf_input_idx);
+    input_dim.n = 1;
+    input_dim.c = iDim.d[0];
+    input_dim.h = iDim.d[1];
+    input_dim.w = iDim.d[2];
+    input_dim.print();
+
+    Dims oDim = engineRT->getBindingDimensions(buf_output_idx);
+    output_dim.n = 1;
+    output_dim.c = oDim.d[0];
+    output_dim.h = oDim.d[1];
+    output_dim.w = oDim.d[2];
+    output_dim.print();
+	
+    // create GPU buffers and a stream
+    for(int i=0; i<engineRT->getNbBindings(); i++) {
+        Dims dim = engineRT->getBindingDimensions(i);
+        buffersDIM[i] = dataDim_t(1, dim.d[0], dim.d[1], dim.d[2]);
+        std::cout<<"RtBuffer "<<i<<"   dim: "; buffersDIM[i].print();
+        checkCuda(cudaMalloc(&buffersRT[i], engineRT->getMaxBatchSize()*dim.d[0]*dim.d[1]*dim.d[2]*sizeof(dnnType)));
+    }
+    checkCuda(cudaMalloc(&output, engineRT->getMaxBatchSize()*output_dim.tot()*sizeof(dnnType)));
+	checkCuda(cudaStreamCreate(&stream));
+}
 
 NetworkRT::NetworkRT(Network *net, const char *name) {
 
@@ -54,7 +234,7 @@ NetworkRT::NetworkRT(Network *net, const char *name) {
         configRT->setMaxWorkspaceSize(1 << 30);
         configRT->setFlag(BuilderFlag::kDEBUG);
 #endif
-        //input and dataType
+        //input and datatype
         dataDim_t dim = net->layers[0]->input_dim;
         dtRT = DataType::kFLOAT;
 
@@ -71,10 +251,13 @@ NetworkRT::NetworkRT(Network *net, const char *name) {
 #if NV_TENSORRT_MAJOR >= 5
         if(net->dla && builderRT->getNbDLACores() > 0) {
             dtRT = DataType::kHALF;
-            builderRT->setFp16Mode(true);
-            builderRT->allowGPUFallback(true);
-            builderRT->setDefaultDeviceType(DeviceType::kDLA);
-            builderRT->setDLACore(0);
+            //builderRT->setfp16mode(true);
+            //builderRT->allowGPUFallback(true);
+            //builderRT->setDefaultDeviceType(DeviceType::kDLA);
+            //builderRT->setDLACore(0);
+            configRT->setDefaultDeviceType(DeviceType::kDLA);
+            configRT->setDLACore(0);
+			configRT->setFlag(BuilderFlag::kGPU_FALLBACK);
         }
 #endif
 #if NV_TENSORRT_MAJOR >= 6                

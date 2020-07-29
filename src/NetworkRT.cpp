@@ -26,7 +26,7 @@ namespace tk { namespace dnn {
 
 std::map<Layer*, nvinfer1::ITensor*>tensors; 
 
-NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_index, int dla_core, Dims3 inputdm, DataType inputdt, const char *binding_name)
+NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_index, int dla_core)
 {
     float rt_ver = float(NV_TENSORRT_MAJOR) + 
                    float(NV_TENSORRT_MINOR)/10 + 
@@ -136,6 +136,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 			input->setName( (l->getLayerName() + std::to_string(i) + "_out").c_str() );
 
 			if(l->final) {
+				std::cerr<<__func__<<":"<<__LINE__<<" setName: "<<(l->getLayerName() + std::to_string(i) + "_out").c_str()<<std::endl;
 				networkRT->markOutput(*input);
 			}
 			tensors[l] = input;
@@ -147,8 +148,9 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 	if(input == NULL)
 			FatalError("conversion failed");
 
+
 	//build tensorRT
-	input->setName(binding_name);
+	input->setName("out");
 
 	networkRT->markOutput(*input);
 
@@ -175,7 +177,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 	// In order to bind the buffers, we need to know the names of the input and output tensors.
 	// note that indices are guaranteed to be less than IEngine::getNbBindings()
 	buf_input_idx = engineRT->getBindingIndex("data"); 
-    buf_output_idx = engineRT->getBindingIndex(binding_name);
+    buf_output_idx = engineRT->getBindingIndex("out");
     std::cout<<"input idex = "<<buf_input_idx<<" -> output index = "<<buf_output_idx<<"\n";
 
 

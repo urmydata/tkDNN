@@ -26,13 +26,14 @@ namespace tk { namespace dnn {
 
 std::map<Layer*, nvinfer1::ITensor*>tensors; 
 
-NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_index, int dla_core, Dims3 inputdm, DataType inputdt)
+NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_index, int dla_core, Dims3 inputdm, DataType inputdt, const char *binding_name)
 {
     float rt_ver = float(NV_TENSORRT_MAJOR) + 
                    float(NV_TENSORRT_MINOR)/10 + 
                    float(NV_TENSORRT_PATCH)/100;
     std::cout<<"New NetworkRT (TensorRT v"<<rt_ver<<")\n";
-  
+
+	tensors.clear();  
     builderRT = createInferBuilder(loggerRT);
     std::cout<<"Float16 support: "<<builderRT->platformHasFastFp16()<<"\n";
     std::cout<<"Int8 support: "<<builderRT->platformHasFastInt8()<<"\n";
@@ -55,7 +56,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
         configRT->setFlag(BuilderFlag::kDEBUG);
 #endif
 
-    dataDim_t dim = net->layers[0]->input_dim;
+    dataDim_t dim = net->layers[start_index]->input_dim;
     dtRT = DataType::kFLOAT;
 
 	builderRT->setMaxBatchSize(net->maxBatchSize);
@@ -71,11 +72,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 #if NV_TENSORRT_MAJOR >= 5
 	if(net->dla && builderRT->getNbDLACores() > 0) {
 			dtRT = DataType::kHALF;
-			//builderRT->setFp16Mode(true);
-			//builderRT->allowGPUFallback(true);
-			//builderRT->setDefaultDeviceType(DeviceType::kDLA);
-			//builderRT->setDLACore(0);
-            configRT->setDefaultDeviceType(DeviceType::kDLA);
+			configRT->setFlag(BuilderFlag::kFP16);
             configRT->setDLACore(dla_core);
 			configRT->setFlag(BuilderFlag::kGPU_FALLBACK);
 	}
@@ -107,8 +104,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 
 
 	ITensor *input;
-	// input = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ dim.c, dim.h, dim.w });
-	input = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ inputdm.d[0], inputdm.d[1], inputdm.d[2] });
+	input = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ dim.c, dim.h, dim.w });
 	checkNULL(input);
 
 	//add other layers
@@ -118,7 +114,13 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 			}
 			Layer *l = net->layers[i];
 			ILayer *Ilay = convert_layer(input, l);
-			if (builderRT->canRunOnDLA(Ilay) == true) {
+#if NV_TENSORRT_MAJOR >= 6                
+            if(net->int8 && builderRT->platformHasFastInt8())
+            {
+                Ilay->setPrecision(DataType::kINT8);
+            }
+#endif
+			if (builderRT->canRunOnDLA(Ilay) == true && net->dla == true) {
 				std::cout << "DLA layer: " << i << ", name: " << l->getLayerName() << std::endl;
 				builderRT->setDeviceType(Ilay, DeviceType::kDLA);	
 			}
@@ -133,20 +135,21 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 			input = Ilay->getOutput(0);
 			input->setName( (l->getLayerName() + std::to_string(i) + "_out").c_str() );
 
-			if(l->final)
+			if(l->final) {
 				networkRT->markOutput(*input);
+			}
 			tensors[l] = input;
 
-			if(end_index == i)
-			{
-					break;
+			if(end_index == i) {
+				break;
 			}
 	}
 	if(input == NULL)
 			FatalError("conversion failed");
 
 	//build tensorRT
-	input->setName("out");
+	input->setName(binding_name);
+
 	networkRT->markOutput(*input);
 
 	std::cout<<"Selected maxBatchSize: "<<builderRT->getMaxBatchSize()<<"\n";
@@ -164,12 +167,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
     } 
     deserialize(name);
 
-	/*
-    std::cout<<"create execution context\n";
-	contextRT = engineRT->createExecutionContext();
-	*/
-
-// input and output buffer pointers that we pass to the engine - the engine requires exactly IEngine::getNbBindings(),
+	// input and output buffer pointers that we pass to the engine - the engine requires exactly IEngine::getNbBindings(),
 	std::cout<<"Input/outputs numbers: "<<engineRT->getNbBindings()<<"\n";
     if(engineRT->getNbBindings() > MAX_BUFFERS_RT)
         FatalError("over RT buffer array size");
@@ -177,7 +175,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 	// In order to bind the buffers, we need to know the names of the input and output tensors.
 	// note that indices are guaranteed to be less than IEngine::getNbBindings()
 	buf_input_idx = engineRT->getBindingIndex("data"); 
-    buf_output_idx = engineRT->getBindingIndex("out");
+    buf_output_idx = engineRT->getBindingIndex(binding_name);
     std::cout<<"input idex = "<<buf_input_idx<<" -> output index = "<<buf_output_idx<<"\n";
 
 
@@ -194,16 +192,6 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
     output_dim.h = oDim.d[1];
     output_dim.w = oDim.d[2];
     output_dim.print();
-	
-    // create GPU buffers and a stream
-    for(int i=0; i<engineRT->getNbBindings(); i++) {
-        Dims dim = engineRT->getBindingDimensions(i);
-        buffersDIM[i] = dataDim_t(1, dim.d[0], dim.d[1], dim.d[2]);
-        std::cout<<"RtBuffer "<<i<<"   dim: "; buffersDIM[i].print();
-        checkCuda(cudaMalloc(&buffersRT[i], engineRT->getMaxBatchSize()*dim.d[0]*dim.d[1]*dim.d[2]*sizeof(dnnType)));
-    }
-    checkCuda(cudaMalloc(&output, engineRT->getMaxBatchSize()*output_dim.tot()*sizeof(dnnType)));
-	checkCuda(cudaStreamCreate(&stream));
 }
 
 NetworkRT::NetworkRT(Network *net, const char *name) {
@@ -255,6 +243,7 @@ NetworkRT::NetworkRT(Network *net, const char *name) {
             //builderRT->allowGPUFallback(true);
             //builderRT->setDefaultDeviceType(DeviceType::kDLA);
             //builderRT->setDLACore(0);
+            configRT->setFlag(BuilderFlag::kFP16);
             configRT->setDefaultDeviceType(DeviceType::kDLA);
             configRT->setDLACore(0);
 			configRT->setFlag(BuilderFlag::kGPU_FALLBACK);

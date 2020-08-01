@@ -31,9 +31,10 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
     float rt_ver = float(NV_TENSORRT_MAJOR) + 
                    float(NV_TENSORRT_MINOR)/10 + 
                    float(NV_TENSORRT_PATCH)/100;
-    std::cout<<"New NetworkRT (TensorRT v"<<rt_ver<<")\n";
 
 	tensors.clear();  
+
+    std::cout<<"New NetworkRT (TensorRT v"<<rt_ver<<")\n";
     builderRT = createInferBuilder(loggerRT);
     std::cout<<"Float16 support: "<<builderRT->platformHasFastFp16()<<"\n";
     std::cout<<"Int8 support: "<<builderRT->platformHasFastInt8()<<"\n";
@@ -79,8 +80,6 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 #endif
 #if NV_TENSORRT_MAJOR >= 6                
         if(net->int8 && builderRT->platformHasFastInt8()){
-            // dtRT = DataType::kINT8;
-            // builderRT->setInt8Mode(true);
             configRT->setFlag(BuilderFlag::kINT8);
             BatchStream calibrationStream(dim, 1, 100,      //TODO: check if 100 images are sufficient to the calibration (or 4951) 
                                             net->fileImgList, net->fileLabelList);
@@ -113,6 +112,23 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 				continue;
 			}
 			Layer *l = net->layers[i];
+			layerType_t type = l->getLayerType();
+			if(type == LAYER_SHORTCUT) 
+			{
+				Shortcut* shortcutLayer = (Shortcut *) l;
+				Layer *backLayer = shortcutLayer->backLayer;
+				std::map<Layer*, nvinfer1::ITensor*>::iterator it = tensors.find(backLayer);
+				if(it == tensors.end()) 
+				{
+					ITensor *input_middle;
+					dataDim_t outdim = backLayer->output_dim;
+					input_middle = networkRT->addInput((backLayer->getLayerName() + "To" + std::to_string(i) + "_out").c_str(), DataType::kFLOAT, DimsCHW{ outdim.c, outdim.h, outdim.w });
+					checkNULL(input_middle);
+					tensors[shortcutLayer->backLayer] = input_middle;
+				}
+			}
+
+
 			ILayer *Ilay = convert_layer(input, l);
 #if NV_TENSORRT_MAJOR >= 6                
             if(net->int8 && builderRT->platformHasFastInt8())
@@ -130,13 +146,10 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 			}
 			Ilay->setName( (l->getLayerName() + std::to_string(i)).c_str() );
 
-			std::cout << "layer: " << i << ", name: " << l->getLayerName() << std::endl;
-
 			input = Ilay->getOutput(0);
 			input->setName( (l->getLayerName() + std::to_string(i) + "_out").c_str() );
 
 			if(l->final) {
-				std::cerr<<__func__<<":"<<__LINE__<<" setName: "<<(l->getLayerName() + std::to_string(i) + "_out").c_str()<<std::endl;
 				networkRT->markOutput(*input);
 			}
 			tensors[l] = input;
@@ -145,6 +158,24 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 				break;
 			}
 	}
+
+	for(int i=end_index+1; i<net->num_layers; i++) 	
+	{
+		Layer *l = net->layers[i];
+		layerType_t type = l->getLayerType();
+		if(type == LAYER_SHORTCUT) 
+		{
+			Shortcut* shortcutLayer = (Shortcut *) l;
+			std::map<Layer*, nvinfer1::ITensor*>::iterator it = tensors.find(shortcutLayer->backLayer);
+			if(it != tensors.end()) 
+			{
+				if(shortcutLayer->backLayer->output_dim.c != shortcutLayer->output_dim.c) FatalError("Different shortcut size for output is not supported.");
+				networkRT->markOutput(*(it->second));
+			}
+		}
+	}
+
+
 	if(input == NULL)
 			FatalError("conversion failed");
 

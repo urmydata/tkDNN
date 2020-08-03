@@ -102,9 +102,10 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 #endif
 
 
-	ITensor *input;
+	ITensor *input, *input_network;
 	input = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ dim.c, dim.h, dim.w });
 	checkNULL(input);
+	input_network = input;
 
 	//add other layers
 	for(int i=0; i<net->num_layers; i++) {
@@ -113,6 +114,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 			}
 			Layer *l = net->layers[i];
 			layerType_t type = l->getLayerType();
+
 			if(type == LAYER_SHORTCUT) 
 			{
 				Shortcut* shortcutLayer = (Shortcut *) l;
@@ -122,9 +124,15 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 				{
 					ITensor *input_middle;
 					dataDim_t outdim = backLayer->output_dim;
-					input_middle = networkRT->addInput((backLayer->getLayerName() + "To" + std::to_string(i) + "_out").c_str(), DataType::kFLOAT, DimsCHW{ outdim.c, outdim.h, outdim.w });
-					checkNULL(input_middle);
-					tensors[shortcutLayer->backLayer] = input_middle;
+
+					if(backLayer->id != start_index-1) {
+						input_middle = networkRT->addInput((backLayer->getLayerName() + "To" + std::to_string(i) + "_out").c_str(), DataType::kFLOAT, DimsCHW{ outdim.c, outdim.h, outdim.w });
+						checkNULL(input_middle);
+						tensors[shortcutLayer->backLayer] = input_middle;
+					}
+					else {
+						tensors[shortcutLayer->backLayer] = input_network;
+					}
 				}
 			}
 

@@ -1,4 +1,5 @@
 #include <iostream>
+#include <list>
 #include <map>
 #include <errno.h>
 #include <string.h> // memcpy
@@ -25,6 +26,69 @@ class Logger : public ILogger {
 namespace tk { namespace dnn {
 
 std::map<Layer*, nvinfer1::ITensor*>tensors; 
+
+void insertLayerToList(std::list<Layer*>& layer_list, Layer *l) {
+	std::list<Layer*>::iterator it;
+	for(it = layer_list.begin(); it != layer_list.end(); it++) {
+		if((*it)->id > l->id) {
+			std::cerr<<"layer "<<l->id<<" inserted"<<std::endl;
+			layer_list.insert(it, l);	
+			break;
+		}	
+	}
+	if(it == layer_list.end()) {
+		std::cerr<<"layer "<<l->id<<" inserted"<<std::endl;
+		layer_list.insert(it, l);	
+	}
+}
+
+void makeOutputMap(Network *net, std::map<int, std::list<int>>& output_map) {
+	for(int i=0; i<net->num_layers; i++) {
+		Layer *l = net->layers[i];
+		layerType_t type = l->getLayerType();
+
+		if(type == LAYER_SHORTCUT)  {
+			Shortcut* shortcutLayer = (Shortcut *) l;
+			Layer *backLayer = shortcutLayer->backLayer;
+
+			std::map<int, std::list<int>>::iterator it;
+			it = output_map.find(backLayer->id);
+
+			if(it != output_map.end()) {
+				(it->second).push_back(l->id);
+			}
+			else {
+				std::list<int> targetLayerList;
+				targetLayerList.push_back(l->id);
+				output_map.insert(std::pair<int, std::list<int>>(backLayer->id, targetLayerList));
+			}
+		}
+		else if(type == LAYER_ROUTE) {
+			Route *routeLayer = (Route *) l;
+
+			for(int iter = 0; iter < routeLayer->layers_n; iter++) {
+				Layer *currLayer = routeLayer->layers[iter];
+
+				std::map<int, std::list<int>>::iterator it;
+				it = output_map.find(currLayer->id);
+
+				if(it != output_map.end()) {
+					(it->second).push_back(l->id);
+				}
+				else {
+					std::list<int> targetLayerList;
+					targetLayerList.push_back(l->id);
+					output_map.insert(std::pair<int, std::list<int>>(currLayer->id, targetLayerList));
+				}
+
+			}
+		}
+	}
+
+	for(std::map<int, std::list<int>>::iterator it = output_map.begin(); it != output_map.end(); it++) {
+		(it->second).sort();	
+	}
+}
 
 NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_index, int dla_core)
 {
@@ -103,39 +167,57 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 
 
 	ITensor *input, *input_network;
-	input = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ dim.c, dim.h, dim.w });
-	checkNULL(input);
-	input_network = input;
+	bool duplicated_input_flag = false;
+
+	std::map<int, std::list<int>> output_map;
+	makeOutputMap(net, output_map);
 
 	//add other layers
 	for(int i=0; i<net->num_layers; i++) {
-			if(i < start_index) {
-				continue;
-			}
 			Layer *l = net->layers[i];
 			layerType_t type = l->getLayerType();
 
-			if(type == LAYER_SHORTCUT) 
-			{
-				Shortcut* shortcutLayer = (Shortcut *) l;
-				Layer *backLayer = shortcutLayer->backLayer;
-				std::map<Layer*, nvinfer1::ITensor*>::iterator it = tensors.find(backLayer);
-				if(it == tensors.end()) 
-				{
-					ITensor *input_middle;
-					dataDim_t outdim = backLayer->output_dim;
+			if(i < start_index) {
+				std::map<int, std::list<int>>::iterator it;
+				it = output_map.find(l->id);
+				if(it != output_map.end()) {
+					std::list<int>::iterator it2;
+					for(it2 = (it->second).begin(); it2 != (it->second).end(); it2++) {
+						Layer *tl = net->layers[(*it2)];
 
-					if(backLayer->id != start_index-1) {
-						input_middle = networkRT->addInput((backLayer->getLayerName() + "To" + std::to_string(i) + "_out").c_str(), DataType::kFLOAT, DimsCHW{ outdim.c, outdim.h, outdim.w });
-						checkNULL(input_middle);
-						tensors[shortcutLayer->backLayer] = input_middle;
-					}
-					else {
-						tensors[shortcutLayer->backLayer] = input_network;
+						if(tl->id >= start_index && tl->id <= end_index) {
+							ITensor *input_middle;
+							dataDim_t outdim = l->output_dim;
+
+							std::cerr<<"tl->id: "<<tl->id<<" added"<<std::endl;
+							if(l->id == start_index-1) {
+								input = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ dim.c, dim.h, dim.w });
+								checkNULL(input);
+								tensors[l] = input;
+
+								input_network = input;
+								duplicated_input_flag = true;	
+							}
+							else {
+								input_middle = networkRT->addInput((l->getLayerName() + "To" + std::to_string(tl->id) + "_out").c_str(), DataType::kFLOAT, DimsCHW{ outdim.c, outdim.h, outdim.w });
+								checkNULL(input_middle);
+								tensors[l] = input_middle;
+							}
+						}
 					}
 				}
-			}
 
+				continue;
+			}
+			else if(i == start_index) {
+				if(!duplicated_input_flag) {
+					input = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ dim.c, dim.h, dim.w });
+					checkNULL(input);
+				}
+				else {
+					input = input_network;
+				}
+			}
 
 			ILayer *Ilay = convert_layer(input, l);
 #if NV_TENSORRT_MAJOR >= 6                
@@ -154,19 +236,23 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 			}
 			Ilay->setName( (l->getLayerName() + std::to_string(i)).c_str() );
 
+
 			input = Ilay->getOutput(0);
 			input->setName( (l->getLayerName() + std::to_string(i) + "_out").c_str() );
+
 
 			if(l->final) {
 				networkRT->markOutput(*input);
 			}
 			tensors[l] = input;
 
+
 			if(end_index == i) {
 				break;
 			}
 	}
-
+	
+	std::cerr<<"insert to output_layer_list"<<std::endl;
 	for(int i=end_index+1; i<net->num_layers; i++) 	
 	{
 		Layer *l = net->layers[i];
@@ -179,21 +265,32 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 			{
 				if(shortcutLayer->backLayer->output_dim.c != shortcutLayer->output_dim.c) FatalError("Different shortcut size for output is not supported.");
 				networkRT->markOutput(*(it->second));
+				std::cerr<<"sLayer output size: "<<shortcutLayer->backLayer->output_dim.c * shortcutLayer->backLayer->output_dim.h * shortcutLayer->backLayer->output_dim.w<<std::endl;
+			}
+		}
+		else if(type == LAYER_ROUTE)
+		{
+			Route *routeLayer = (Route *) l;
+			for(int iter = 0; iter < routeLayer->layers_n; iter++) {
+				Layer *currLayer = routeLayer->layers[iter];
+				std::map<Layer*, nvinfer1::ITensor*>::iterator it = tensors.find(currLayer);
+				if(it != tensors.end())  {
+					networkRT->markOutput(*(it->second));
+					std::cerr<<"rLayer output size: "<<currLayer->output_dim.c * currLayer->output_dim.h * currLayer->output_dim.w<<std::endl;
+				}
 			}
 		}
 	}
 
+	//build tensorRT
+	input->setName("out");
+	networkRT->markOutput(*input);
 
 	if(input == NULL)
 			FatalError("conversion failed");
 
 
-	//build tensorRT
-	input->setName("out");
-
-	networkRT->markOutput(*input);
-
-	std::cout<<"Selected maxBatchSize: "<<builderRT->getMaxBatchSize()<<"\n";
+		std::cout<<"Selected maxBatchSize: "<<builderRT->getMaxBatchSize()<<"\n";
 	printCudaMemUsage();
 	std::cout<<"Building tensorRT cuda engine...\n";
 #if NV_TENSORRT_MAJOR >= 6                

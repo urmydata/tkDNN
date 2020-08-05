@@ -27,21 +27,6 @@ namespace tk { namespace dnn {
 
 std::map<Layer*, nvinfer1::ITensor*>tensors; 
 
-void insertLayerToList(std::list<Layer*>& layer_list, Layer *l) {
-	std::list<Layer*>::iterator it;
-	for(it = layer_list.begin(); it != layer_list.end(); it++) {
-		if((*it)->id > l->id) {
-			std::cerr<<"layer "<<l->id<<" inserted"<<std::endl;
-			layer_list.insert(it, l);	
-			break;
-		}	
-	}
-	if(it == layer_list.end()) {
-		std::cerr<<"layer "<<l->id<<" inserted"<<std::endl;
-		layer_list.insert(it, l);	
-	}
-}
-
 void makeOutputMap(Network *net, std::map<int, std::list<int>>& output_map) {
 	for(int i=0; i<net->num_layers; i++) {
 		Layer *l = net->layers[i];
@@ -189,7 +174,6 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 							ITensor *input_middle;
 							dataDim_t outdim = l->output_dim;
 
-							std::cerr<<"tl->id: "<<tl->id<<" added"<<std::endl;
 							if(l->id == start_index-1) {
 								input = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ dim.c, dim.h, dim.w });
 								checkNULL(input);
@@ -252,7 +236,6 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 			}
 	}
 	
-	std::cerr<<"insert to output_layer_list"<<std::endl;
 	for(int i=end_index+1; i<net->num_layers; i++) 	
 	{
 		Layer *l = net->layers[i];
@@ -265,7 +248,6 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 			{
 				if(shortcutLayer->backLayer->output_dim.c != shortcutLayer->output_dim.c) FatalError("Different shortcut size for output is not supported.");
 				networkRT->markOutput(*(it->second));
-				std::cerr<<"sLayer output size: "<<shortcutLayer->backLayer->output_dim.c * shortcutLayer->backLayer->output_dim.h * shortcutLayer->backLayer->output_dim.w<<std::endl;
 			}
 		}
 		else if(type == LAYER_ROUTE)
@@ -276,7 +258,6 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 				std::map<Layer*, nvinfer1::ITensor*>::iterator it = tensors.find(currLayer);
 				if(it != tensors.end())  {
 					networkRT->markOutput(*(it->second));
-					std::cerr<<"rLayer output size: "<<currLayer->output_dim.c * currLayer->output_dim.h * currLayer->output_dim.w<<std::endl;
 				}
 			}
 		}

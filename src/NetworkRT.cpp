@@ -123,8 +123,10 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 	if(net->dla && builderRT->getNbDLACores() > 0) {
 			dtRT = DataType::kHALF;
 			configRT->setFlag(BuilderFlag::kFP16);
+			configRT->setDefaultDeviceType(DeviceType::kDLA);
             configRT->setDLACore(dla_core);
 			configRT->setFlag(BuilderFlag::kGPU_FALLBACK);
+			configRT->setFlag(BuilderFlag::kSTRICT_TYPES);
 	}
 #endif
 #if NV_TENSORRT_MAJOR >= 6                
@@ -210,9 +212,8 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
                 Ilay->setPrecision(DataType::kINT8);
             }
 #endif
-			if (builderRT->canRunOnDLA(Ilay) == true && net->dla == true) {
+			if (configRT->canRunOnDLA(Ilay) == true && net->dla == true) {
 				std::cout << "DLA layer: " << i << ", name: " << l->getLayerName() << std::endl;
-				builderRT->setDeviceType(Ilay, DeviceType::kDLA);	
 			}
 			else
 			{
@@ -271,7 +272,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 			FatalError("conversion failed");
 
 
-		std::cout<<"Selected maxBatchSize: "<<builderRT->getMaxBatchSize()<<"\n";
+	std::cout<<"Selected maxBatchSize: "<<builderRT->getMaxBatchSize()<<"\n";
 	printCudaMemUsage();
 	std::cout<<"Building tensorRT cuda engine...\n";
 #if NV_TENSORRT_MAJOR >= 6                
@@ -742,6 +743,7 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Route *l) {
     }
 
     if(l->groups > 1){
+		std::cerr<<"Route plugin is added"<<std::endl;
         IPlugin *plugin = new RouteRT(l->groups, l->group_id);
         IPluginLayer *lRT = networkRT->addPlugin(tens, l->layers_n, *plugin);
         checkNULL(lRT);
@@ -799,7 +801,10 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Shortcut *l) {
 
     if(l->backLayer->output_dim.c == l->output_dim.c)
     {
-        IElementWiseLayer *lRT = networkRT->addElementWise(*input, *back_tens, ElementWiseOperation::kSUM);
+        IActivationLayer *lact = networkRT->addActivation(*back_tens, ActivationType::kRELU);
+        ITensor *nextBackTens = lact->getOutput(0);
+
+        IElementWiseLayer *lRT = networkRT->addElementWise(*nextBackTens, *input, ElementWiseOperation::kSUM);
         checkNULL(lRT);
         return lRT;
     }

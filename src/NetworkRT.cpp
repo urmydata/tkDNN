@@ -177,12 +177,17 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 							dataDim_t outdim = l->output_dim;
 
 							if(l->id == start_index-1) {
-								input = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ dim.c, dim.h, dim.w });
-								checkNULL(input);
-								tensors[l] = input;
+								if(!duplicated_input_flag) {
+									input = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ dim.c, dim.h, dim.w });
+									checkNULL(input);
+									tensors[l] = input;
 
-								input_network = input;
-								duplicated_input_flag = true;	
+									input_network = input;
+									duplicated_input_flag = true;	
+								}
+								else {
+									tensors[l] = input_network;
+								}
 							}
 							else {
 								input_middle = networkRT->addInput((l->getLayerName() + "To" + std::to_string(tl->id) + "_out").c_str(), DataType::kFLOAT, DimsCHW{ outdim.c, outdim.h, outdim.w });
@@ -214,6 +219,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 #endif
 			if (configRT->canRunOnDLA(Ilay) == true && net->dla == true) {
 				std::cout << "DLA layer: " << i << ", name: " << l->getLayerName() << std::endl;
+				configRT->setDeviceType(Ilay, DeviceType::kDLA);
 			}
 			else
 			{
@@ -730,12 +736,11 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Softmax *l) {
 
 ILayer* NetworkRT::convert_layer(ITensor *input, Route *l) {
     // std::cout<<"convert route\n";
-    
-
 
     ITensor **tens = new ITensor*[l->layers_n];
     for(int i=0; i<l->layers_n; i++) {
         tens[i] = tensors[l->layers[i]];
+
         // for(int j=0; j<tens[i]->getDimensions().nbDims; j++) {
         //     std::cout<<tens[i]->getDimensions().d[j]<<" ";
         // }
@@ -743,12 +748,13 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Route *l) {
     }
 
     if(l->groups > 1){
-		std::cerr<<"Route plugin is added"<<std::endl;
         IPlugin *plugin = new RouteRT(l->groups, l->group_id);
         IPluginLayer *lRT = networkRT->addPlugin(tens, l->layers_n, *plugin);
+		
         checkNULL(lRT);
         return lRT;
     }
+
     IConcatenationLayer *lRT = networkRT->addConcatenation(tens, l->layers_n);
     checkNULL(lRT);
     return lRT;

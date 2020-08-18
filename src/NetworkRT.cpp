@@ -210,33 +210,35 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 				}
 			}
 
-			ILayer *Ilay = convert_layer(input, l);
+			if(l->getLayerType() == LAYER_ROUTE && ((Route *)l)->layers_n == 1 && ((Route *)l)->groups == 1) {
+				input = tensors[((Route *)l)->layers[0]];
+			}
+			else {
+				ILayer *Ilay = convert_layer(input, l);
 #if NV_TENSORRT_MAJOR >= 6                
-            if(net->int8 && builderRT->platformHasFastInt8())
-            {
-                Ilay->setPrecision(DataType::kINT8);
-            }
+				if(net->int8 && builderRT->platformHasFastInt8())
+				{
+					Ilay->setPrecision(DataType::kINT8);
+				}
 #endif
-			if (configRT->canRunOnDLA(Ilay) == true && net->dla == true) {
-				std::cout << "DLA layer: " << i << ", name: " << l->getLayerName() << std::endl;
-				configRT->setDeviceType(Ilay, DeviceType::kDLA);
+				if (configRT->canRunOnDLA(Ilay) == true && net->dla == true) {
+					std::cout << "DLA layer: " << i << ", name: " << l->getLayerName() << std::endl;
+					configRT->setDeviceType(Ilay, DeviceType::kDLA);
+				}
+				else
+				{
+					std::cout << "GPU layer: " << i << ", name: " << l->getLayerName() << std::endl;
+				}
+				Ilay->setName( (l->getLayerName() + std::to_string(i)).c_str() );
+
+				input = Ilay->getOutput(0);
+				input->setName( (l->getLayerName() + std::to_string(i) + "_out").c_str() );
 			}
-			else
-			{
-				std::cout << "GPU layer: " << i << ", name: " << l->getLayerName() << std::endl;
-			}
-			Ilay->setName( (l->getLayerName() + std::to_string(i)).c_str() );
-
-
-			input = Ilay->getOutput(0);
-			input->setName( (l->getLayerName() + std::to_string(i) + "_out").c_str() );
-
 
 			if(l->final) {
 				networkRT->markOutput(*input);
 			}
 			tensors[l] = input;
-
 
 			if(end_index == i) {
 				break;

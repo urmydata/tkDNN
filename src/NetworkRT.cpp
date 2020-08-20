@@ -295,6 +295,10 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
     } 
     deserialize(name);
 
+	if(net->dla) {
+		runtimeRT->setDLACore(dla_core);
+	}
+
 	// input and output buffer pointers that we pass to the engine - the engine requires exactly IEngine::getNbBindings(),
 	std::cout<<"Input/outputs numbers: "<<engineRT->getNbBindings()<<"\n";
     if(engineRT->getNbBindings() > MAX_BUFFERS_RT)

@@ -66,6 +66,7 @@ public:
     void* buffersRT[MAX_BUFFERS_RT];
     dataDim_t buffersDIM[MAX_BUFFERS_RT];
     int buf_input_idx, buf_output_idx;
+	bool is_dla = false;
 
     dataDim_t input_dim, output_dim;
     dnnType *output;
@@ -114,6 +115,8 @@ public:
 
     bool serialize(const char *filename);
     bool deserialize(const char *filename);
+
+	void run_on_dla(ILayer*l);
 };
 
 

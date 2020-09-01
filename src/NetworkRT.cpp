@@ -127,6 +127,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
             configRT->setDLACore(dla_core);
 			configRT->setFlag(BuilderFlag::kGPU_FALLBACK);
 			configRT->setFlag(BuilderFlag::kSTRICT_TYPES);
+			is_dla = true;
 	}
 #endif
 #if NV_TENSORRT_MAJOR >= 6                
@@ -499,6 +500,12 @@ NetworkRT::~NetworkRT() {
 
 }
 
+void NetworkRT::run_on_dla(ILayer*l) {
+	if (configRT->canRunOnDLA(l) == true && is_dla == true) {
+		configRT->setDeviceType(l, DeviceType::kDLA);
+	}
+}
+
 dnnType* NetworkRT::infer(dataDim_t &dim, dnnType* data) {
     int batches = dim.n;
     if(batches > getMaxBatchSize()) {
@@ -637,6 +644,8 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Conv2d *l) {
     }
 
     checkNULL(lRT);
+	run_on_dla(lRT);
+
     if(l->batchnorm) {
         Weights power{dtRT, power_b, l->outputs};
         Weights shift{dtRT, mean_b, l->outputs};
@@ -646,12 +655,14 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Conv2d *l) {
                     shift, scale, power);
         
         checkNULL(lRT2);
+		run_on_dla(lRT2);
 
         Weights shift2{dtRT, bias_b, l->outputs};
         Weights scale2{dtRT, scales_b, l->outputs};
         IScaleLayer *lRT3 = networkRT->addScale(*lRT2->getOutput(0), ScaleMode::kCHANNEL, 
                     shift2, scale2, power);
         checkNULL(lRT3);
+		run_on_dla(lRT3);
 
         return lRT3;
     }
@@ -869,6 +880,7 @@ ILayer* NetworkRT::convert_layer(ITensor *input, DeformConv2d *l) {
     IPluginLayer *lRT = networkRT->addPlugin(inputs, 2, *plugin);
     checkNULL(lRT);
     lRT->setName( ("Deformable" + std::to_string(l->id)).c_str() );
+	run_on_dla(lRT);
     delete(inputs);
     // batchnorm
     void *bias_b, *power_b, *mean_b, *variance_b, *scales_b;
@@ -894,12 +906,14 @@ ILayer* NetworkRT::convert_layer(ITensor *input, DeformConv2d *l) {
                 shift, scale, power);
     
     checkNULL(lRT2);
+	run_on_dla(lRT2);
 
     Weights shift2{dtRT, bias_b, l->outputs};
     Weights scale2{dtRT, scales_b, l->outputs};
     IScaleLayer *lRT3 = networkRT->addScale(*lRT2->getOutput(0), ScaleMode::kCHANNEL, 
                 shift2, scale2, power);
     checkNULL(lRT3);
+	run_on_dla(lRT3);
 
     return lRT3;
 }

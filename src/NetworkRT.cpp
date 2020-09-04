@@ -178,23 +178,15 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 							dataDim_t outdim = l->output_dim;
 
 							if(l->id == start_index-1) {
-								if(!duplicated_input_flag) {
-									input = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ dim.c, dim.h, dim.w });
-									checkNULL(input);
-									tensors[l] = input;
-
-									input_network = input;
-									duplicated_input_flag = true;	
-								}
-								else {
-									tensors[l] = input_network;
-								}
+								input_middle = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ outdim.c, outdim.h, outdim.w });
+								duplicated_input_flag = true;
+								input_network = input_middle;
 							}
 							else {
 								input_middle = networkRT->addInput((l->getLayerName() + "To" + std::to_string(tl->id) + "_out").c_str(), DataType::kFLOAT, DimsCHW{ outdim.c, outdim.h, outdim.w });
-								checkNULL(input_middle);
-								tensors[l] = input_middle;
 							}
+							checkNULL(input_middle);
+							tensors[l] = input_middle;
 						}
 					}
 				}
@@ -304,27 +296,6 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 	std::cout<<"Input/outputs numbers: "<<engineRT->getNbBindings()<<"\n";
     if(engineRT->getNbBindings() > MAX_BUFFERS_RT)
         FatalError("over RT buffer array size");
-
-	// In order to bind the buffers, we need to know the names of the input and output tensors.
-	// note that indices are guaranteed to be less than IEngine::getNbBindings()
-	buf_input_idx = engineRT->getBindingIndex("data"); 
-    buf_output_idx = engineRT->getBindingIndex("out");
-    std::cout<<"input idex = "<<buf_input_idx<<" -> output index = "<<buf_output_idx<<"\n";
-
-
-    Dims iDim = engineRT->getBindingDimensions(buf_input_idx);
-    input_dim.n = 1;
-    input_dim.c = iDim.d[0];
-    input_dim.h = iDim.d[1];
-    input_dim.w = iDim.d[2];
-    input_dim.print();
-
-    Dims oDim = engineRT->getBindingDimensions(buf_output_idx);
-    output_dim.n = 1;
-    output_dim.c = oDim.d[0];
-    output_dim.h = oDim.d[1];
-    output_dim.w = oDim.d[2];
-    output_dim.print();
 }
 
 NetworkRT::NetworkRT(Network *net, const char *name) {
@@ -758,10 +729,12 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Route *l) {
     for(int i=0; i<l->layers_n; i++) {
         tens[i] = tensors[l->layers[i]];
 
-        // for(int j=0; j<tens[i]->getDimensions().nbDims; j++) {
-        //     std::cout<<tens[i]->getDimensions().d[j]<<" ";
-        // }
-        // std::cout<<"\n";
+		/*
+        for(int j=0; j<tens[i]->getDimensions().nbDims; j++) {
+            std::cout<<tens[i]->getDimensions().d[j]<<" ";
+        }
+        std::cout<<"\n";
+		*/
     }
 
     if(l->groups > 1){
@@ -825,6 +798,7 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Shortcut *l) {
     if(l->backLayer->output_dim.c == l->output_dim.c)
     {
         IActivationLayer *lact = networkRT->addActivation(*back_tens, ActivationType::kRELU);
+		run_on_dla(lact);
         ITensor *nextBackTens = lact->getOutput(0);
 
         IElementWiseLayer *lRT = networkRT->addElementWise(*nextBackTens, *input, ElementWiseOperation::kSUM);

@@ -50,23 +50,42 @@ void makeOutputMap(Network *net, std::map<int, std::list<int>>& output_map) {
 		}
 		else if(type == LAYER_ROUTE) {
 			Route *routeLayer = (Route *) l;
-
-			for(int iter = 0; iter < routeLayer->layers_n; iter++) {
-				Layer *currLayer = routeLayer->layers[iter];
-
+			if(((Route *)l)->layers_n == 1 && ((Route *)l)->groups == 1)
+			{
+				Layer *currLayer = routeLayer->layers[0];
 				std::map<int, std::list<int>>::iterator it;
 				it = output_map.find(currLayer->id);
-
-				if(it != output_map.end()) {
-					(it->second).push_back(l->id);
+				if(i+1 < net->num_layers)
+				{
+					Layer *lNext = net->layers[i+1];
+					if(it != output_map.end()) {
+						(it->second).push_back(lNext->id);
+					}
+					else {
+						std::list<int> targetLayerList;
+						targetLayerList.push_back(lNext->id);
+						output_map.insert(std::pair<int, std::list<int>>(currLayer->id, targetLayerList));
+					}		
 				}
-				else {
-					std::list<int> targetLayerList;
-					targetLayerList.push_back(l->id);
-					output_map.insert(std::pair<int, std::list<int>>(currLayer->id, targetLayerList));
-				}
-
 			}
+			else
+			{
+				for(int iter = 0; iter < routeLayer->layers_n; iter++) {
+					Layer *currLayer = routeLayer->layers[iter];
+					std::map<int, std::list<int>>::iterator it;
+					it = output_map.find(currLayer->id);
+					if(it != output_map.end()) {
+						(it->second).push_back(l->id);
+					}
+					else {
+						std::list<int> targetLayerList;
+						targetLayerList.push_back(l->id);
+						output_map.insert(std::pair<int, std::list<int>>(currLayer->id, targetLayerList));
+					}
+
+				}
+			}
+
 		}
 	}
 
@@ -173,17 +192,20 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 					for(it2 = (it->second).begin(); it2 != (it->second).end(); it2++) {
 						Layer *tl = net->layers[(*it2)];
 
-						if(tl->id >= start_index && tl->id <= end_index) {
+						if(tl->id >= start_index && tl->id <= end_index ) {
 							ITensor *input_middle;
 							dataDim_t outdim = l->output_dim;
 
 							if(l->id == start_index-1) {
-								input_middle = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ outdim.c, outdim.h, outdim.w });
+								if(start_index > 0 )
+ 									input_middle = networkRT->addInput("data", DataType::kHALF, DimsCHW{ outdim.c, outdim.h, outdim.w });
+								else
+									input_middle = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ outdim.c, outdim.h, outdim.w });
 								duplicated_input_flag = true;
 								input_network = input_middle;
 							}
 							else {
-								input_middle = networkRT->addInput((l->getLayerName() + "To" + std::to_string(tl->id) + "_out").c_str(), DataType::kFLOAT, DimsCHW{ outdim.c, outdim.h, outdim.w });
+								input_middle = networkRT->addInput((l->getLayerName() + "To" + std::to_string(tl->id) + "_out").c_str(), DataType::kHALF, DimsCHW{ outdim.c, outdim.h, outdim.w });
 							}
 							checkNULL(input_middle);
 							tensors[l] = input_middle;
@@ -194,12 +216,34 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 				continue;
 			}
 			else if(i == start_index) {
-				if(!duplicated_input_flag) {
-					input = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ dim.c, dim.h, dim.w });
-					checkNULL(input);
+				if(i > 0)
+				{
+					Layer *lBefore = net->layers[i-1];
+					if(lBefore->getLayerType() == LAYER_ROUTE && ((Route *)lBefore)->layers_n == 1 && ((Route *)lBefore)->groups == 1)
+					{
+						input = tensors[((Route *)lBefore)->layers[0]];
+					}
+					else
+					{
+						if(!duplicated_input_flag) {
+							if(start_index > 0)
+								input = networkRT->addInput("data", DataType::kHALF, DimsCHW{ dim.c, dim.h, dim.w });
+							else
+								input = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ dim.c, dim.h, dim.w });
+							checkNULL(input);
+						}
+						else {
+							input = input_network;
+						}
+					}
 				}
-				else {
-					input = input_network;
+				else
+				{
+					if(start_index > 0)
+						input = networkRT->addInput("data", DataType::kHALF, DimsCHW{ dim.c, dim.h, dim.w });
+					else
+						input = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ dim.c, dim.h, dim.w });
+					checkNULL(input);			
 				}
 			}
 
@@ -249,6 +293,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 			if(it != tensors.end()) 
 			{
 				if(shortcutLayer->backLayer->output_dim.c != shortcutLayer->output_dim.c) FatalError("Different shortcut size for output is not supported.");
+				it->second->setType(DataType::kHALF);
 				networkRT->markOutput(*(it->second));
 			}
 		}
@@ -259,6 +304,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 				Layer *currLayer = routeLayer->layers[iter];
 				std::map<Layer*, nvinfer1::ITensor*>::iterator it = tensors.find(currLayer);
 				if(it != tensors.end())  {
+					it->second->setType(DataType::kHALF);
 					networkRT->markOutput(*(it->second));
 				}
 			}
@@ -267,6 +313,11 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 
 	//build tensorRT
 	input->setName("out");
+	if(end_index + 1 < net->num_layers)
+	{
+		input->setType(DataType::kHALF);
+	}
+
 	networkRT->markOutput(*input);
 
 	if(input == NULL)

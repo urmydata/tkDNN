@@ -114,6 +114,10 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 	configRT = builderRT->createBuilderConfig();
 #endif
 
+	if(net->dla) {
+		is_dla = true;	
+	}
+
     if(!fileExist(name)) {
 #if NV_TENSORRT_MAJOR >= 6                
         // Calibrator life time needs to last until after the engine is built.
@@ -197,12 +201,14 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 							dataDim_t outdim = l->output_dim;
 
 							if(l->id == start_index-1) {
-								if(start_index > 0 )
- 									input_middle = networkRT->addInput("data", DataType::kHALF, DimsCHW{ outdim.c, outdim.h, outdim.w });
-								else
-									input_middle = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ outdim.c, outdim.h, outdim.w });
-								duplicated_input_flag = true;
-								input_network = input_middle;
+								if(!duplicated_input_flag) {
+									if(start_index > 0 )
+ 										input_middle = networkRT->addInput("data", DataType::kHALF, DimsCHW{ outdim.c, outdim.h, outdim.w });
+									else
+										input_middle = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ outdim.c, outdim.h, outdim.w });
+									duplicated_input_flag = true;
+									input_network = input_middle;
+								}
 							}
 							else {
 								input_middle = networkRT->addInput((l->getLayerName() + "To" + std::to_string(tl->id) + "_out").c_str(), DataType::kHALF, DimsCHW{ outdim.c, outdim.h, outdim.w });
@@ -337,11 +343,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
     std::cout<<"serialize net\n";
     serialize(name);
     } 
-    deserialize(name);
-
-	if(net->dla) {
-		runtimeRT->setDLACore(dla_core);
-	}
+    deserialize(name, dla_core);
 
 	// input and output buffer pointers that we pass to the engine - the engine requires exactly IEngine::getNbBindings(),
 	std::cout<<"Input/outputs numbers: "<<engineRT->getNbBindings()<<"\n";
@@ -474,9 +476,8 @@ NetworkRT::NetworkRT(Network *net, const char *name) {
         //networkRT->destroy();
         std::cout<<"serialize net\n";
         serialize(name);
-    } else {
-        deserialize(name);
     }
+    deserialize(name);
 
     std::cout<<"create execution context\n";
 	contextRT = engineRT->createExecutionContext();
@@ -796,6 +797,17 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Route *l) {
         return lRT;
     }
 
+    if(l->layers_n > 1 && is_dla == true)
+    {
+        for(int i=0; i<l->layers_n; i++) {
+            ITensor *back_tens = tensors[l->layers[i]];
+            IPoolingLayer *lPool = networkRT->addPooling(*back_tens, PoolingType::kMAX, DimsHW{1, 1});
+            lPool->setStride(DimsHW{1, 1});
+            run_on_dla(lPool);
+            tens[i] = lPool->getOutput(0);
+        }  
+    }   
+
     IConcatenationLayer *lRT = networkRT->addConcatenation(tens, l->layers_n);
     checkNULL(lRT);
     return lRT;
@@ -848,11 +860,15 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Shortcut *l) {
 
     if(l->backLayer->output_dim.c == l->output_dim.c)
     {
-        IActivationLayer *lact = networkRT->addActivation(*back_tens, ActivationType::kRELU);
-		run_on_dla(lact);
-        ITensor *nextBackTens = lact->getOutput(0);
+		if(is_dla == true)
+		{
+			IPoolingLayer *lPool = networkRT->addPooling(*back_tens, PoolingType::kMAX, DimsHW{1, 1});
+    	    lPool->setStride(DimsHW{1, 1});
+	        run_on_dla(lPool);
+    	    back_tens = lPool->getOutput(0);
+		}
 
-        IElementWiseLayer *lRT = networkRT->addElementWise(*nextBackTens, *input, ElementWiseOperation::kSUM);
+        IElementWiseLayer *lRT = networkRT->addElementWise(*back_tens, *input, ElementWiseOperation::kSUM);
         checkNULL(lRT);
         return lRT;
     }
@@ -957,6 +973,9 @@ bool NetworkRT::serialize(const char *filename) {
 
     p.write(reinterpret_cast<const char*>(ptr->data()), ptr->size());
     ptr->destroy();
+	engineRT->destroy();
+    engineRT = nullptr;
+
     return true;
 }
 
@@ -982,7 +1001,30 @@ bool NetworkRT::deserialize(const char *filename) {
     return true;
 }
 
+bool NetworkRT::deserialize(const char *filename, int dla_core) {
 
+    char *gieModelStream{nullptr};
+    size_t size{0};
+    std::ifstream file(filename, std::ios::binary);
+    if (file.good()) {
+        file.seekg(0, file.end);
+        size = file.tellg();
+        file.seekg(0, file.beg);
+        gieModelStream = new char[size];
+        file.read(gieModelStream, size);
+        file.close();
+    }
+
+    pluginFactory = new PluginFactory();
+    runtimeRT = createInferRuntime(loggerRT);
+	if(is_dla) {
+		runtimeRT->setDLACore(dla_core);
+	}
+    engineRT = runtimeRT->deserializeCudaEngine(gieModelStream, size, (IPluginFactory *) pluginFactory);
+    //if (gieModelStream) delete [] gieModelStream;
+
+    return true;
+}
 
 IPlugin* PluginFactory::createPlugin(const char* layerName, const void* serialData, size_t serialLength) {
     const char * buf = reinterpret_cast<const char*>(serialData);

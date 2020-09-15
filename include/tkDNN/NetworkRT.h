@@ -115,6 +115,7 @@ public:
 
     bool serialize(const char *filename);
     bool deserialize(const char *filename);
+    bool deserialize(const char *filename, int dla_core);
 
 	void run_on_dla(ILayer*l);
 };

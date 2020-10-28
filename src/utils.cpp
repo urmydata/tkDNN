@@ -46,28 +46,43 @@ void downloadWeightsifDoNotExist(const std::string& input_bin, const std::string
     }
 }
 
+dnnType get_rand(int low=-5, int high=5){
+    int range = high - low;
+    return low + static_cast <dnnType> (rand()) / (static_cast <dnnType> (RAND_MAX/(range)));
+}
+
 
 void readBinaryFile(std::string fname, int size, dnnType** data_h, dnnType** data_d, int seek)
 {
-    std::ifstream dataFile (fname, std::ios::in | std::ios::binary);
-    std::stringstream error_s;
-    if (!dataFile)
-    {
-        error_s << "Error opening file " << fname; 
-        FatalError(error_s.str());
-    }
-
-    if(seek != 0) {
-        dataFile.seekg(seek*sizeof(dnnType), dataFile.cur);
-    }
-
     int size_b = size*sizeof(dnnType);
     *data_h = new dnnType[size];
-    if (!dataFile.read ((char*) *data_h, size_b)) 
-    {
-        error_s << "Error reading file " << fname << " with n of float: "<<size;
-        error_s << " seek: "<<seek << " size: "<<size_b<<"\n";
-        FatalError(error_s.str());
+
+    bool use_random_weight = fname.empty();
+    if (use_random_weight){
+        std::cerr << "Randomly generating weights" << std::endl;
+        int i;
+        for (i = 0; i < size; i++){
+            (*data_h)[i] = get_rand();
+        }
+    } else{
+        std::ifstream dataFile (fname, std::ios::in | std::ios::binary);
+        std::stringstream error_s;
+        if (!dataFile)
+        {
+            error_s << "Error opening file " << fname; 
+            FatalError(error_s.str());
+        }
+
+        if(seek != 0) {
+            dataFile.seekg(seek*sizeof(dnnType), dataFile.cur);
+        }
+
+        if (!dataFile.read ((char*) *data_h, size_b)) 
+        {
+            error_s << "Error reading file " << fname << " with n of float: "<<size;
+            error_s << " seek: "<<seek << " size: "<<size_b<<"\n";
+            FatalError(error_s.str());
+        }
     }
     
     checkCuda( cudaMalloc(data_d, size_b) );

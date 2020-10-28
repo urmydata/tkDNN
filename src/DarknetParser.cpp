@@ -101,6 +101,9 @@ namespace tk { namespace dnn {
 
 
     void darknetAddLayer(tk::dnn::Network *net, darknetFields_t &f, std::string wgs_path, std::vector<tk::dnn::Layer*> &netLayers, const std::vector<std::string>& names) {
+        std::string wgs = "";
+        bool use_random_weights = wgs_path.empty();
+        
         if(net == nullptr)
             FatalError("Cant add a layer without a Net\n");
 
@@ -110,7 +113,7 @@ namespace tk { namespace dnn {
         }
         //std::cout<<"Add layer: "<<f.type<<"\n";
         if(f.type == "convolutional") {
-            std::string wgs = wgs_path + "/c" + std::to_string(netLayers.size()) + ".bin";
+            if (!use_random_weights) wgs = wgs_path + "/c" + std::to_string(netLayers.size()) + ".bin";
             //printf("%d (%d,%d) (%d,%d) (%d,%d) %s %d %d\n", f.filters, f.size_x, f.size_y, f.stride_x, f.stride_y, f.padding_x, f.padding_y, wgs.c_str(), f.batch_normalize, f.groups);
             tk::dnn::Conv2d *l= new tk::dnn::Conv2d(net, f.filters, f.size_x, f.size_y, f.stride_x, 
                                 f.stride_y, f.padding_x, f.padding_y, wgs, f.batch_normalize, false, f.groups);
@@ -159,7 +162,7 @@ namespace tk { namespace dnn {
             netLayers.push_back(new tk::dnn::Region(net, f.classes, f.coords, f.num));
 
         } else if(f.type == "yolo") {
-            std::string wgs = wgs_path + "/g" + std::to_string(netLayers.size()) + ".bin";
+            if (!use_random_weights) wgs = wgs_path + "/g" + std::to_string(netLayers.size()) + ".bin";
             //printf("%d %d %s %d %f\n", f.classes, f.num/f.n_mask, wgs.c_str(), f.n_mask, f.scale_xy);
             tk::dnn::Yolo *l = new tk::dnn::Yolo(net, f.classes, f.num/f.n_mask, wgs, f.n_mask, f.scale_xy);
             if(names.size() != f.classes)

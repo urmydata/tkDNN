@@ -75,3 +75,51 @@ int testInference(std::vector<std::string> input_bins, std::vector<std::string> 
     checkCuda( cudaFree(data) );
     return ret_cudnn | ret_tensorrt | ret_cudnn_tensorrt;
 }
+
+int inferWithRandomInput(tk::dnn::Network *net, tk::dnn::NetworkRT *netRT = nullptr) {
+
+    std::vector<tk::dnn::Layer*> outputs;
+    for(int i=0; i<net->num_layers; i++) {
+        if(net->layers[i]->final)
+            outputs.push_back(net->layers[i]);
+    }
+    // no final layers, set last as output
+    if(outputs.size() == 0) {
+        outputs.push_back(net->layers[net->num_layers-1]);
+    }
+
+    // Load input
+    dnnType *data;
+    dnnType *input_h;
+    std::string null_path_for_random_input = "";
+    readBinaryFile(null_path_for_random_input, net->input_dim.tot(), &input_h, &data);
+
+    // outputs
+    dnnType *cudnn_out[outputs.size()], *rt_out[outputs.size()]; 
+
+    tk::dnn::dataDim_t dim1 =  net->input_dim; //input dim
+    printCenteredTitle(" CUDNN inference ", '=', 30); {
+        dim1.print();
+        TKDNN_TSTART
+        net->infer(dim1, data);    
+        TKDNN_TSTOP
+        dim1.print();   
+    }
+    for(int i=0; i<outputs.size(); i++) cudnn_out[i] = outputs[i]->dstData;
+
+    if(netRT != nullptr) {
+        tk::dnn::dataDim_t dim2 = net->input_dim;
+        printCenteredTitle(" TENSORRT inference ", '=', 30); {
+            dim2.print();
+            TKDNN_TSTART
+            netRT->infer(dim2, data);
+            TKDNN_TSTOP
+            dim2.print();
+        }
+        for(int i=0; i<outputs.size(); i++) rt_out[i] = (dnnType*)netRT->buffersRT[i+1];
+    }
+
+    delete [] input_h;
+    checkCuda( cudaFree(data) );
+    return 0;
+}

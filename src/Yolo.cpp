@@ -21,14 +21,14 @@ Yolo::Yolo(Network *net, int classes, int num, std::string fname_weights, int n_
     this->scaleXY = scale_xy;
 
     // load anchors
-    // if(fname_weights != "") {
-    int seek = 0;
-    readBinaryFile(fname_weights, n_masks, &mask_h, &mask_d, seek);
-    seek += n_masks;
-    readBinaryFile(fname_weights, n_masks*num*2, &bias_h, &bias_d, seek);
+    if(fname_weights != "") { // TODO: may conflict when trying to use random weights. You can comment out this condition check to run it..
+        int seek = 0;
+        readBinaryFile(fname_weights, n_masks, &mask_h, &mask_d, seek);
+        seek += n_masks;
+        readBinaryFile(fname_weights, n_masks*num*2, &bias_h, &bias_d, seek);
     //for(int i=0; i<n_masks*num*2; i++)
         //printf("%f\n", bias_h[i]);
-    // }
+    }
 
     // init default classes name
     classesNames.clear();

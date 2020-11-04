@@ -97,16 +97,6 @@ int inferWithRandomInput(tk::dnn::Network *net, tk::dnn::NetworkRT *netRT = null
     // outputs
     dnnType *cudnn_out[outputs.size()], *rt_out[outputs.size()]; 
 
-    tk::dnn::dataDim_t dim1 =  net->input_dim; //input dim
-    printCenteredTitle(" CUDNN inference ", '=', 30); {
-        dim1.print();
-        TKDNN_TSTART
-        net->infer(dim1, data);    
-        TKDNN_TSTOP
-        dim1.print();   
-    }
-    for(int i=0; i<outputs.size(); i++) cudnn_out[i] = outputs[i]->dstData;
-
     if(netRT != nullptr) {
         tk::dnn::dataDim_t dim2 = net->input_dim;
         printCenteredTitle(" TENSORRT inference ", '=', 30); {

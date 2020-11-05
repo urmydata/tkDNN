@@ -23,7 +23,7 @@ int main() {
     // Load input
     dnnType *data;
     dnnType *input_h;
-    readBinaryFile(input_bin, dim.tot(), &input_h, &data);
+    readBinaryFileOrRandomInit(input_bin, dim.tot(), &input_h, &data);
 
     // Print input
     std::cout<<"\n======= INPUT =======\n";

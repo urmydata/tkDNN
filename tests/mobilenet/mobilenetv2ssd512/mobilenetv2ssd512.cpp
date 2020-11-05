@@ -463,7 +463,7 @@ int main()
     // Load input
     dnnType *data;
     dnnType *input_h;
-    readBinaryFile(input_bin, dim.tot(), &input_h, &data);
+    readBinaryFileOrRandomInit(input_bin, dim.tot(), &input_h, &data);
     //printDeviceVector(64, data, true);
 
     //print network model
@@ -505,11 +505,11 @@ int main()
     printCenteredTitle(std::string(" RESNET CHECK RESULTS ").c_str(), '=', 30);
     dnnType *out1, *out1_h;
     int odim1 = out_dim1.tot();
-    readBinaryFile(output_bin1, odim1, &out1_h, &out1);
+    readBinaryFileOrRandomInit(output_bin1, odim1, &out1_h, &out1);
 
     dnnType *out2, *out2_h;
     int odim2 = out_dim2.tot();
-    readBinaryFile(output_bin2, odim2, &out2_h, &out2);
+    readBinaryFileOrRandomInit(output_bin2, odim2, &out2_h, &out2);
     int ret_cudnn = 0, ret_tensorrt = 0, ret_cudnn_tensorrt = 0; 
     
     std::cout << "CUDNN vs correct" << std::endl;

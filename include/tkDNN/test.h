@@ -26,7 +26,7 @@ int testInference(std::vector<std::string> input_bins, std::vector<std::string> 
     // Load input
     dnnType *data;
     dnnType *input_h;
-    readBinaryFile(input_bins[0], net->input_dim.tot(), &input_h, &data);
+    readBinaryFileOrRandomInit(input_bins[0], net->input_dim.tot(), &input_h, &data);
 
     // outputs
     dnnType *cudnn_out[outputs.size()], *rt_out[outputs.size()]; 
@@ -58,7 +58,7 @@ int testInference(std::vector<std::string> input_bins, std::vector<std::string> 
         printCenteredTitle((std::string(" OUTPUT ") + std::to_string(i) + " CHECK RESULTS ").c_str(), '=', 30);
         dnnType *out, *out_h;
         int odim = outputs[i]->output_dim.tot();
-        readBinaryFile(output_bins[i], odim, &out_h, &out);
+        readBinaryFileOrRandomInit(output_bins[i], odim, &out_h, &out);
         std::cout<<"CUDNN vs correct"; 
         ret_cudnn |= checkResult(odim, cudnn_out[i], out) == 0 ? 0: ERROR_CUDNN;
         if(netRT != nullptr) {
@@ -92,7 +92,7 @@ int inferWithRandomInput(tk::dnn::Network *net, tk::dnn::NetworkRT *netRT = null
     dnnType *data;
     dnnType *input_h;
     std::string null_path_for_random_input = "";
-    readBinaryFile(null_path_for_random_input, net->input_dim.tot(), &input_h, &data);
+    readBinaryFileOrRandomInit(null_path_for_random_input, net->input_dim.tot(), &input_h, &data);
 
     // outputs
     dnnType *cudnn_out[outputs.size()], *rt_out[outputs.size()]; 

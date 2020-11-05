@@ -29,7 +29,7 @@ int main() {
     // Load input
     dnnType *data;
     dnnType *input_h;
-    readBinaryFile(input_bin, dim.tot(), &input_h, &data);
+    readBinaryFileOrRandomInit(input_bin, dim.tot(), &input_h, &data);
 
     dnnType *out_data, *out_data2;
 

@@ -43,7 +43,7 @@ int main() {
     // Load input
     dnnType *data;
     dnnType *input_h;
-    readBinaryFile(input_bin, dim.tot(), &input_h, &data);
+    readBinaryFileOrRandomInit(input_bin, dim.tot(), &input_h, &data);
 
     dim.print(); //print initial dimension
     
@@ -59,7 +59,7 @@ int main() {
     std::cout<<"\n==== CHECK CUDNN RESULT ====\n";
     dnnType *out;
     dnnType *out_h;
-    readBinaryFile(output_bin, dim.tot(), &out_h, &out);
+    readBinaryFileOrRandomInit(output_bin, dim.tot(), &out_h, &out);
     std::cout<<"Diff: "<<checkResult(dim.tot(), out, data)<<"\n";
  
 

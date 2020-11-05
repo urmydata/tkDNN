@@ -28,17 +28,17 @@ int main() {
     // Load input
     dnnType *i0_d, *i1_d, *i2_d;
     dnnType *i0_h, *i1_h, *i2_h;
-    readBinaryFile(i0_bin, dim0.tot()*N, &i0_h, &i0_d);
-    readBinaryFile(i1_bin, dim1.tot()*N, &i1_h, &i1_d);
-    readBinaryFile(i2_bin, dim2.tot()*N, &i2_h, &i2_d);
+    readBinaryFileOrRandomInit(i0_bin, dim0.tot()*N, &i0_h, &i0_d);
+    readBinaryFileOrRandomInit(i1_bin, dim1.tot()*N, &i1_h, &i1_d);
+    readBinaryFileOrRandomInit(i2_bin, dim2.tot()*N, &i2_h, &i2_d);
 
     dnnType *data;
     tk::dnn::dataDim_t dim;
 
     dnnType *out0, *out1;
     dnnType *out0_h, *out1_h;
-    readBinaryFile(o0_bin, ImuNet.odim0.tot()*N, &out0_h, &out0);
-    readBinaryFile(o1_bin, ImuNet.odim1.tot()*N, &out1_h, &out1);
+    readBinaryFileOrRandomInit(o0_bin, ImuNet.odim0.tot()*N, &out0_h, &out0);
+    readBinaryFileOrRandomInit(o1_bin, ImuNet.odim1.tot()*N, &out1_h, &out1);
 
     
     std::ofstream path("path.txt");

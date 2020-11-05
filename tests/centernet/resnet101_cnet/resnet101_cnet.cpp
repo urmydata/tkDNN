@@ -347,7 +347,7 @@ int main()
     // Load input
     dnnType *data;
     dnnType *input_h;
-    readBinaryFile(input_bin, dim.tot(), &input_h, &data);
+    readBinaryFileOrRandomInit(input_bin, dim.tot(), &input_h, &data);
     // printDeviceVector(64, data, true);
 
     //print network model
@@ -389,7 +389,7 @@ int main()
         
         dnnType *out, *out_h;
         int odim = outs[i]->output_dim.tot();
-        readBinaryFile(output_bin[i], odim, &out_h, &out);
+        readBinaryFileOrRandomInit(output_bin[i], odim, &out_h, &out);
         // std::cout<<"OUTPUT BIN:\n";
         // printDeviceVector(odim, cudnn_out, true);
         // std::cout<<"FILE BIN:\n";

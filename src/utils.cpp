@@ -52,14 +52,13 @@ dnnType get_rand(int low=-5, int high=5){
 }
 
 
-void readBinaryFile(std::string fname, int size, dnnType** data_h, dnnType** data_d, int seek)
+void readBinaryFileOrRandomInit(std::string fname, int size, dnnType** data_h, dnnType** data_d, int seek)
 {
     int size_b = size*sizeof(dnnType);
     *data_h = new dnnType[size];
 
     bool use_random_weight = fname.empty();
     if (use_random_weight){
-        std::cerr << "Randomly generating weights" << std::endl;
         int i;
         for (i = 0; i < size; i++){
             (*data_h)[i] = get_rand();

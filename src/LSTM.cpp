@@ -123,7 +123,7 @@ LSTM::LSTM( Network *net, int hiddensize, bool returnSeq, std::string fname_weig
 
     // load params
     std::cout<<"Reading weights: PARAMS="<<cudnn_params*2<<"\n";
-    readBinaryFile(fname_weights, cudnn_params*2, &w_h, &w_ptr);
+    readBinaryFileOrRandomInit(fname_weights, cudnn_params*2, &w_h, &w_ptr);
     // set forward and backward params
     wf_ptr = w_ptr;
     wb_ptr = w_ptr + cudnn_params;

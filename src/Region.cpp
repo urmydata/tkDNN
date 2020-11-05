@@ -83,7 +83,7 @@ RegionInterpret::RegionInterpret(dataDim_t input_dim, dataDim_t output_dim,
     s = (sortable_bbox*) malloc(tot*sizeof(sortable_bbox));
 
     //load anchors
-    readBinaryFile(fname_weights, 2*num, &bias_h, &bias_d);
+    readBinaryFileOrRandomInit(fname_weights, 2*num, &bias_h, &bias_d);
 }
 
 RegionInterpret::~RegionInterpret() {

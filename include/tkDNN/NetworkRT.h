@@ -92,7 +92,7 @@ public:
     }
 
     /**
-        Do inferece
+        Do inference
     */
     dnnType* infer(dataDim_t &dim, dnnType* data);
     void enqueue(int batchSize = 1);    

@@ -94,6 +94,26 @@ void makeOutputMap(Network *net, std::map<int, std::list<int>>& output_map) {
 	}
 }
 
+int getLastInputLayerIdOfStartLayer(int start_index, std::map<int, std::list<int>> output_map) {
+	std::map<int, std::list<int>>::iterator it;
+	std::list<int>::iterator it2;
+	int id = -1;
+
+	for(int iter = 0; iter < start_index; iter++) {
+		it = output_map.find(iter);
+
+		if(it != output_map.end()) {
+			for(it2 = (it->second).begin(); it2 != (it->second).end(); it2++) {
+				if(*it2 == start_index) {
+					id = iter;
+				}
+			}
+		}
+	}
+
+	return id;
+}
+
 NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_index, int dla_core)
 {
     float rt_ver = float(NV_TENSORRT_MAJOR) + 
@@ -183,6 +203,8 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 	std::map<int, std::list<int>> output_map;
 	makeOutputMap(net, output_map);
 
+	int data_layer_id = getLastInputLayerIdOfStartLayer(start_index, output_map);
+
 	//add other layers
 	for(int i=0; i<net->num_layers; i++) {
 			Layer *l = net->layers[i];
@@ -200,7 +222,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 							ITensor *input_middle;
 							dataDim_t outdim = l->output_dim;
 
-							if(l->id == start_index-1) {
+							if(l->id == start_index-1 || l->id == data_layer_id) {
 								if(!duplicated_input_flag) {
 									if(start_index > 0 )
  										input_middle = networkRT->addInput("data", DataType::kHALF, DimsCHW{ outdim.c, outdim.h, outdim.w });
@@ -211,7 +233,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 								}
 							}
 							else {
-								input_middle = networkRT->addInput((l->getLayerName() + "To" + std::to_string(tl->id) + "_out").c_str(), DataType::kHALF, DimsCHW{ outdim.c, outdim.h, outdim.w });
+								input_middle = networkRT->addInput((l->getLayerName() + std::to_string(l->id) + "To" + std::to_string(tl->id) + "_out").c_str(), DataType::kHALF, DimsCHW{ outdim.c, outdim.h, outdim.w });
 							}
 							checkNULL(input_middle);
 							tensors[l] = input_middle;

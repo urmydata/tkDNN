@@ -27,7 +27,7 @@ namespace tk { namespace dnn {
 
 std::map<Layer*, nvinfer1::ITensor*>tensors; 
 
-void makeOutputMap(Network *net, std::map<int, std::list<int>>& output_map) {
+static void makeOutputMap(Network *net, std::map<int, std::list<int>>& output_map) {
 	for(int i=0; i<net->num_layers; i++) {
 		Layer *l = net->layers[i];
 		layerType_t type = l->getLayerType();
@@ -50,7 +50,7 @@ void makeOutputMap(Network *net, std::map<int, std::list<int>>& output_map) {
 		}
 		else if(type == LAYER_ROUTE) {
 			Route *routeLayer = (Route *) l;
-			if(((Route *)l)->layers_n == 1 && ((Route *)l)->groups == 1)
+			if(routeLayer->layers_n == 1 && routeLayer->groups == 1)
 			{
 				Layer *currLayer = routeLayer->layers[0];
 				std::map<int, std::list<int>>::iterator it;
@@ -92,26 +92,6 @@ void makeOutputMap(Network *net, std::map<int, std::list<int>>& output_map) {
 	for(std::map<int, std::list<int>>::iterator it = output_map.begin(); it != output_map.end(); it++) {
 		(it->second).sort();	
 	}
-}
-
-int getLastInputLayerIdOfStartLayer(int start_index, std::map<int, std::list<int>> output_map) {
-	std::map<int, std::list<int>>::iterator it;
-	std::list<int>::iterator it2;
-	int id = -1;
-
-	for(int iter = 0; iter < start_index; iter++) {
-		it = output_map.find(iter);
-
-		if(it != output_map.end()) {
-			for(it2 = (it->second).begin(); it2 != (it->second).end(); it2++) {
-				if(*it2 == start_index) {
-					id = iter;
-				}
-			}
-		}
-	}
-
-	return id;
 }
 
 NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_index, int dla_core)
@@ -203,8 +183,6 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 	std::map<int, std::list<int>> output_map;
 	makeOutputMap(net, output_map);
 
-	int data_layer_id = getLastInputLayerIdOfStartLayer(start_index, output_map);
-
 	//add other layers
 	for(int i=0; i<net->num_layers; i++) {
 			Layer *l = net->layers[i];
@@ -222,21 +200,28 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 							ITensor *input_middle;
 							dataDim_t outdim = l->output_dim;
 
-							if(l->id == start_index-1 || l->id == data_layer_id) {
+							if(l->id == start_index - 1) {
 								if(!duplicated_input_flag) {
 									if(start_index > 0 )
  										input_middle = networkRT->addInput("data", DataType::kHALF, DimsCHW{ outdim.c, outdim.h, outdim.w });
 									else
 										input_middle = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ outdim.c, outdim.h, outdim.w });
+
+									checkNULL(input_middle);
+									tensors[l] = input_middle;
 									duplicated_input_flag = true;
 									input_network = input_middle;
 								}
 							}
 							else {
-								input_middle = networkRT->addInput((l->getLayerName() + std::to_string(l->id) + "To" + std::to_string(tl->id) + "_out").c_str(), DataType::kHALF, DimsCHW{ outdim.c, outdim.h, outdim.w });
+
+								if(tensors.find(l) == tensors.end())
+								{
+									input_middle = networkRT->addInput((l->getLayerName() + std::to_string(l->id) + "To" + std::to_string(tl->id) + "_out").c_str(), DataType::kHALF, DimsCHW{ outdim.c, outdim.h, outdim.w });
+									checkNULL(input_middle);
+									tensors[l] = input_middle;
+								}
 							}
-							checkNULL(input_middle);
-							tensors[l] = input_middle;
 						}
 					}
 				}
@@ -546,7 +531,7 @@ NetworkRT::~NetworkRT() {
 }
 
 void NetworkRT::run_on_dla(ILayer*l) {
-	if (configRT->canRunOnDLA(l) == true && is_dla == true) {
+	if (is_dla == true && configRT->canRunOnDLA(l) == true) {
 		configRT->setDeviceType(l, DeviceType::kDLA);
 	}
 }

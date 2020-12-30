@@ -305,7 +305,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 			std::map<Layer*, nvinfer1::ITensor*>::iterator it = tensors.find(shortcutLayer->backLayer);
 			if(it != tensors.end()) 
 			{
-				if(shortcutLayer->backLayer->output_dim.c != shortcutLayer->output_dim.c) FatalError("Different shortcut size for output is not supported.");
+				//if(shortcutLayer->backLayer->output_dim.c != shortcutLayer->output_dim.c) FatalError("Different shortcut size for output is not supported.");
 				it->second->setType(DataType::kHALF);
 				networkRT->markOutput(*(it->second));
 			}

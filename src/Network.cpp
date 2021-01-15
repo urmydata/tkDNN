@@ -19,10 +19,12 @@ Network::Network(dataDim_t input_dim) {
     tensorFormat = CUDNN_TENSOR_NCHW;
     dontLoadWeights = false;
     num_layers = 0;
+    sample_size=0;
 
-    fp16 = true;
+    fp16=false;
     dla = false;
-    int8 = false;
+    int8 = true; 
+
 
     maxBatchSize = 1;
     if(const char* env_p = std::getenv("TKDNN_BATCHSIZE")) {
@@ -33,7 +35,8 @@ Network::Network(dataDim_t input_dim) {
     
     if(const char* env_p = std::getenv("TKDNN_CALIB_LABEL_PATH"))
         fileLabelList = env_p;
-    
+
+    std::cout<<fileImgList<<"ok"<<fileLabelList; 
    
     if(fp16)
         std::cout<<COL_REDB<<"!! FP16 INFERENCE ENABLED !!"<<COL_END<<"\n";

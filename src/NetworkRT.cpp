@@ -37,7 +37,7 @@ void makeOutputMap(Network *net, std::map<int, std::list<int>>& output_map) {
 			Layer *backLayer = shortcutLayer->backLayer;
 
 			std::map<int, std::list<int>>::iterator it;
-			it = output_map.find(backLayer->id);
+			it = output_map.find(backLayer->id); 
 
 			if(it != output_map.end()) {
 				(it->second).push_back(l->id);
@@ -127,6 +127,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
         configRT->setMinTimingIterations(1);
         configRT->setMaxWorkspaceSize(1 << 30);
         configRT->setFlag(BuilderFlag::kDEBUG);
+       
 #endif
 
     dataDim_t dim = net->layers[start_index]->input_dim;
@@ -156,7 +157,14 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 #if NV_TENSORRT_MAJOR >= 6                
         if(net->int8 && builderRT->platformHasFastInt8()){
             configRT->setFlag(BuilderFlag::kINT8);
-            BatchStream calibrationStream(dim, 1, 100,      //TODO: check if 100 images are sufficient to the calibration (or 4951) 
+            // std::string ImageList = "/home/stan/disk/coco2017/all_images.txt";
+            // std::string ImageLabel = "/home/stan/disk/coco2017/all_labels.txt";
+            // net->fileImgList=ImageList;
+            // net->fileLabelList=ImageLabel;
+
+            std::cout<<"read:"<<net->fileImgList<<"read:"<<net->fileLabelList<<"\n";
+ 
+            BatchStream calibrationStream(dim, 1, net->sample_size,      //TODO: check if 100 images are sufficient to the calibration (or 4951) 
                                             net->fileImgList, net->fileLabelList);
             
             /* The calibTableFilePath contains the path+filename of the calibration table.
@@ -164,6 +172,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
              * Each network is located in a folder with the same name as the network.
              * If the folder has a different name, the calibration table is saved in build/ folder.
              */
+           
             std::string calib_table_name = net->networkName + "/" + net->networkNameRT.substr(0, net->networkNameRT.find('.')) + "-calibration.table";
             std::string calib_table_path = net->networkName;
             if(!fileExist((const char *)calib_table_path.c_str()))
@@ -173,6 +182,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
                                             calib_table_name, 
                                             "data"));
             configRT->setInt8Calibrator(calibrator.get());
+           
         }
 #endif
 

@@ -64,6 +64,7 @@ public:
 
     bool fp16, dla, int8;
     int maxBatchSize;
+    int sample_size;  // add for calibration
     bool dontLoadWeights;
     std::string fileImgList;
     std::string fileLabelList;

@@ -102,6 +102,9 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 
 	tensors.clear();  
 
+	runtimeRT = nullptr;
+	engineRT = nullptr;
+
     std::cout<<"New NetworkRT (TensorRT v"<<rt_ver<<")\n";
     builderRT = createInferBuilder(loggerRT);
     std::cout<<"Float16 support: "<<builderRT->platformHasFastFp16()<<"\n";
@@ -349,6 +352,11 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
         FatalError("cloud not build cuda engine")
     std::cout<<"serialize net\n";
     serialize(name);
+	networkRT->destroy();
+	builderRT->destroy();
+	configRT->destroy();
+	output_map.clear();
+
     } 
     deserialize(name, dla_core);
 
@@ -527,6 +535,26 @@ NetworkRT::NetworkRT(Network *net, const char *name) {
 }
 
 NetworkRT::~NetworkRT() {
+	if(engineRT != nullptr){
+		engineRT->destroy();
+	}
+		
+	if(runtimeRT != nullptr) {
+		runtimeRT->destroy();
+	}
+
+/*	if(builderRT != nullptr) {
+		builderRT->destroy();
+	}
+
+	if(networkRT != nullptr) {
+		networkRT->destroy();
+	}
+
+	if(configRT != nullptr) {
+		configRT->destroy();
+	}
+*/
 
 }
 
@@ -803,8 +831,8 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Route *l) {
     }
 
     if(l->groups > 1){
-        IPlugin *plugin = new RouteRT(l->groups, l->group_id);
-        IPluginLayer *lRT = networkRT->addPlugin(tens, l->layers_n, *plugin);
+        IPluginExt *plugin = new RouteRT(l->groups, l->group_id);
+        IPluginLayer *lRT = networkRT->addPluginExt(tens, l->layers_n, *plugin);
 		
         checkNULL(lRT);
         return lRT;
@@ -1009,7 +1037,7 @@ bool NetworkRT::deserialize(const char *filename) {
     pluginFactory = new PluginFactory();
     runtimeRT = createInferRuntime(loggerRT);
     engineRT = runtimeRT->deserializeCudaEngine(gieModelStream, size, (IPluginFactory *) pluginFactory);
-    //if (gieModelStream) delete [] gieModelStream;
+    if (gieModelStream) delete [] gieModelStream;
 
     return true;
 }
@@ -1034,7 +1062,7 @@ bool NetworkRT::deserialize(const char *filename, int dla_core) {
 		runtimeRT->setDLACore(dla_core);
 	}
     engineRT = runtimeRT->deserializeCudaEngine(gieModelStream, size, (IPluginFactory *) pluginFactory);
-    //if (gieModelStream) delete [] gieModelStream;
+    if (gieModelStream) delete [] gieModelStream;
 
     return true;
 }
@@ -1189,6 +1217,7 @@ IPlugin* PluginFactory::createPlugin(const char* layerName, const void* serialDa
         r->c = readBUF<int>(buf);
         r->h = readBUF<int>(buf);
         r->w = readBUF<int>(buf);
+		r->mDataType = readBUF<nvinfer1::DataType>(buf);
         return r;
     } 
 

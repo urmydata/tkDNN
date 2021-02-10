@@ -124,7 +124,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
     if(!fileExist(name)) {
 #if NV_TENSORRT_MAJOR >= 6                
         // Calibrator life time needs to last until after the engine is built.
-        std::unique_ptr<IInt8EntropyCalibrator> calibrator;
+        std::unique_ptr<IInt8EntropyCalibrator2> calibrator;
 
         configRT->setAvgTimingIterations(1);
         configRT->setMinTimingIterations(1);
@@ -166,10 +166,8 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
              * Each network is located in a folder with the same name as the network.
              * If the folder has a different name, the calibration table is saved in build/ folder.
              */
-            std::string calib_table_name = net->networkName + "/" + net->networkNameRT.substr(0, net->networkNameRT.find('.')) + "-calibration.table";
-            std::string calib_table_path = net->networkName;
-            if(!fileExist((const char *)calib_table_path.c_str()))
-                calib_table_name = "./" + net->networkNameRT.substr(0, net->networkNameRT.find('.')) + "-calibration.table";
+            std::string calib_table_name = std::string(name);
+			calib_table_name = calib_table_name.substr(0, calib_table_name.rfind('.')) + "-calibration.table";
 
             calibrator.reset(new Int8EntropyCalibrator(calibrationStream, 1, 
                                             calib_table_name, 
@@ -386,7 +384,7 @@ NetworkRT::NetworkRT(Network *net, const char *name) {
     if(!fileExist(name)) {
 #if NV_TENSORRT_MAJOR >= 6                
         // Calibrator life time needs to last until after the engine is built.
-        std::unique_ptr<IInt8EntropyCalibrator> calibrator;
+        std::unique_ptr<IInt8EntropyCalibrator2> calibrator;
 
         configRT->setAvgTimingIterations(1);
         configRT->setMinTimingIterations(1);

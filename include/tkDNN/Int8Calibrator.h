@@ -25,7 +25,7 @@
  * save the calibration process results to reduce the running time: 
  * the calibration process takes a long time.
  */
-class Int8EntropyCalibrator : public nvinfer1::IInt8EntropyCalibrator {
+class Int8EntropyCalibrator : public nvinfer1::IInt8EntropyCalibrator2 {
 public:
 	Int8EntropyCalibrator(BatchStream& stream, int firstBatch, const std::string& calibTableFilePath, 
 							const std::string& inputBlobName, bool readCache = true);

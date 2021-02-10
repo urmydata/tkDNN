@@ -159,8 +159,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 #if NV_TENSORRT_MAJOR >= 6                
         if(net->int8 && builderRT->platformHasFastInt8()){
             configRT->setFlag(BuilderFlag::kINT8);
-            BatchStream calibrationStream(dim, 1, 100,      //TODO: check if 100 images are sufficient to the calibration (or 4951) 
-                                            net->fileImgList, net->fileLabelList);
+            BatchStream calibrationStream(dim, 1, net->num_calib_images, net->fileImgList, net->fileLabelList);
             
             /* The calibTableFilePath contains the path+filename of the calibration table.
              * Each calibration table can be found in the corresponding network folder (../Test/*).

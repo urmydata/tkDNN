@@ -19,6 +19,7 @@ Network::Network(dataDim_t input_dim) {
     tensorFormat = CUDNN_TENSOR_NCHW;
     dontLoadWeights = false;
     num_layers = 0;
+	num_calib_images = 100;
 
     fp16 = true;
     dla = false;

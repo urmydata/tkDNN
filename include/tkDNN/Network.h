@@ -63,6 +63,7 @@ public:
     dataDim_t getOutputDim();
 
     bool fp16, dla, int8;
+	int num_calib_images;
     int maxBatchSize;
     bool dontLoadWeights;
     std::string fileImgList;

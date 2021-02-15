@@ -68,7 +68,7 @@ public:
     dataDim_t buffersDIM[MAX_BUFFERS_RT];
     int buf_input_idx, buf_output_idx;
 	bool is_dla = false;
-
+	bool is_int8 = false;
     dataDim_t input_dim, output_dim;
     dnnType *output;
     cudaStream_t stream;

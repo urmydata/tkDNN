@@ -121,6 +121,10 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 		is_dla = true;	
 	}
 
+	if(net->int8 && builderRT->platformHasFastInt8()) {
+		is_int8 = true;
+	}
+
     if(!fileExist(name)) {
 #if NV_TENSORRT_MAJOR >= 6                
         // Calibrator life time needs to last until after the engine is built.
@@ -706,6 +710,12 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Conv2d *l) {
         Weights shift{dtRT, mean_b, l->outputs};
         Weights scale{dtRT, variance_b, l->outputs};
         // std::cout<<lRT->getNbOutputs()<<std::endl;
+		lRT->getOutput(0)->setName( (l->getLayerName() + std::to_string(l->id) + "_convOut").c_str() );	
+		if(is_int8 == true)
+		{
+			lRT->setPrecision(DataType::kINT8);
+		}
+
         IScaleLayer *lRT2 = networkRT->addScale(*lRT->getOutput(0), ScaleMode::kCHANNEL, 
                     shift, scale, power);
         
@@ -714,6 +724,12 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Conv2d *l) {
 
         Weights shift2{dtRT, bias_b, l->outputs};
         Weights scale2{dtRT, scales_b, l->outputs};
+		lRT2->getOutput(0)->setName( (l->getLayerName() + std::to_string(l->id) + "_scaleOut").c_str() );	
+		if(is_int8 == true)
+		{
+			lRT2->setPrecision(DataType::kINT8);
+		}
+
         IScaleLayer *lRT3 = networkRT->addScale(*lRT2->getOutput(0), ScaleMode::kCHANNEL, 
                     shift2, scale2, power);
         checkNULL(lRT3);
@@ -838,13 +854,37 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Route *l) {
     if(l->layers_n > 1 && is_dla == true)
     {
         for(int i=0; i<l->layers_n; i++) {
-            ITensor *back_tens = tensors[l->layers[i]];
-            IPoolingLayer *lPool = networkRT->addPooling(*back_tens, PoolingType::kMAX, DimsHW{1, 1});
-            lPool->setStride(DimsHW{1, 1});
-            run_on_dla(lPool);
-            tens[i] = lPool->getOutput(0);
+			ITensor *back_tens = tensors[l->layers[i]];
+			Layer *back_layer = l->layers[i];
+			layerType_t back_layer_type = back_layer->getLayerType();
+
+			if(back_layer_type == LAYER_ACTIVATION)
+			{
+				IActivationLayer *lAct = networkRT->addActivation(*back_tens, ActivationType::kRELU);
+				checkNULL(lAct);
+				if(is_int8 == true)
+				{
+					lAct->setPrecision(DataType::kINT8);
+				}
+				run_on_dla(lAct);
+				tens[i] = lAct->getOutput(0);
+				lAct->getOutput(0)->setName((l->getLayerName() + std::to_string(l->id) + "_act"+ std::to_string(i)  + "Out").c_str() );
+			}
+			else if(back_layer_type == LAYER_ROUTE || back_layer_type == LAYER_POOLING)
+			{
+				IPoolingLayer *lPool = networkRT->addPooling(*back_tens, PoolingType::kMAX, DimsHW{1, 1});
+			    checkNULL(lPool);
+				if(is_int8 == true)
+				{
+					lPool->setPrecision(DataType::kINT8);
+				}
+				lPool->setStride(DimsHW{1, 1});
+				run_on_dla(lPool);
+				tens[i] = lPool->getOutput(0);
+				lPool->getOutput(0)->setName( (l->getLayerName() + std::to_string(l->id) + "_pool"+ std::to_string(i)  + "Out").c_str() );	
+			}
         }  
-    }   
+    }
 
     IConcatenationLayer *lRT = networkRT->addConcatenation(tens, l->layers_n);
     checkNULL(lRT);
@@ -901,9 +941,15 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Shortcut *l) {
 		if(is_dla == true)
 		{
 			IPoolingLayer *lPool = networkRT->addPooling(*back_tens, PoolingType::kMAX, DimsHW{1, 1});
+			if(is_int8 == true)
+			{
+				lPool->setPrecision(DataType::kINT8);
+			}
     	    lPool->setStride(DimsHW{1, 1});
 	        run_on_dla(lPool);
     	    back_tens = lPool->getOutput(0);
+			lPool->getOutput(0)->setName( (l->getLayerName() + std::to_string(l->id) + "_poolOut").c_str() );	
+
 		}
 
         IElementWiseLayer *lRT = networkRT->addElementWise(*back_tens, *input, ElementWiseOperation::kSUM);

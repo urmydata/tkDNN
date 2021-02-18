@@ -206,8 +206,9 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 
 							if(l->id == start_index - 1) {
 								if(!duplicated_input_flag) {
-									if(start_index > 0 )
- 										input_middle = networkRT->addInput("data", DataType::kHALF, DimsCHW{ outdim.c, outdim.h, outdim.w });
+									if(start_index > 0 ) {
+ 										input_middle = networkRT->addInput((l->getLayerName() + std::to_string(i) + "_out").c_str(), DataType::kHALF, DimsCHW{ outdim.c, outdim.h, outdim.w });
+									}
 									else
 										input_middle = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ outdim.c, outdim.h, outdim.w });
 
@@ -221,7 +222,8 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 
 								if(tensors.find(l) == tensors.end())
 								{
-									input_middle = networkRT->addInput((l->getLayerName() + std::to_string(l->id) + "To" + std::to_string(tl->id) + "_out").c_str(), DataType::kHALF, DimsCHW{ outdim.c, outdim.h, outdim.w });
+									input_middle = networkRT->addInput((l->getLayerName() + std::to_string(l->id) + "_out").c_str(), DataType::kHALF, DimsCHW{ outdim.c, outdim.h, outdim.w });
+									//input_middle = networkRT->addInput((l->getLayerName() + std::to_string(l->id) + "To" + std::to_string(tl->id) + "_out").c_str(), DataType::kHALF, DimsCHW{ outdim.c, outdim.h, outdim.w });
 									checkNULL(input_middle);
 									tensors[l] = input_middle;
 								}
@@ -244,7 +246,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 					{
 						if(!duplicated_input_flag) {
 							if(start_index > 0)
-								input = networkRT->addInput("data", DataType::kHALF, DimsCHW{ dim.c, dim.h, dim.w });
+								input = networkRT->addInput((lBefore->getLayerName() + std::to_string(i) + "_out").c_str(), DataType::kHALF, DimsCHW{ dim.c, dim.h, dim.w });
 							else
 								input = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ dim.c, dim.h, dim.w });
 							checkNULL(input);
@@ -254,12 +256,12 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 						}
 					}
 				}
-				else
+				else // i == start_index == 0 
 				{
-					if(start_index > 0)
-						input = networkRT->addInput("data", DataType::kHALF, DimsCHW{ dim.c, dim.h, dim.w });
-					else
-						input = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ dim.c, dim.h, dim.w });
+					//if(start_index > 0)
+					//	input = networkRT->addInput((l->getLayerName() + std::to_string(i) + "_out").c_str(), DataType::kHALF, DimsCHW{ dim.c, dim.h, dim.w });
+					//else
+					input = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ dim.c, dim.h, dim.w });
 					checkNULL(input);			
 				}
 			}
@@ -329,7 +331,10 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 	}
 
 	//build tensorRT
-	input->setName("out");
+	if(end_index + 1 >= net->num_layers)
+	{
+		input->setName("out");
+	}
 	if(end_index + 1 < net->num_layers)
 	{
 		input->setType(DataType::kHALF);
@@ -870,7 +875,7 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Route *l) {
 				tens[i] = lAct->getOutput(0);
 				lAct->getOutput(0)->setName((l->getLayerName() + std::to_string(l->id) + "_act"+ std::to_string(i)  + "Out").c_str() );
 			}
-			else if(back_layer_type == LAYER_ROUTE || back_layer_type == LAYER_POOLING)
+			else if(back_layer_type == LAYER_ROUTE)
 			{
 				IPoolingLayer *lPool = networkRT->addPooling(*back_tens, PoolingType::kMAX, DimsHW{1, 1});
 			    checkNULL(lPool);
@@ -882,6 +887,22 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Route *l) {
 				run_on_dla(lPool);
 				tens[i] = lPool->getOutput(0);
 				lPool->getOutput(0)->setName( (l->getLayerName() + std::to_string(l->id) + "_pool"+ std::to_string(i)  + "Out").c_str() );	
+			}
+			else if(back_layer_type == LAYER_POOLING){
+				Pooling *lBackPool = (Pooling *)back_layer;
+				if(lBackPool->strideH > 1 &&  lBackPool->strideW > 1)
+				{
+					IPoolingLayer *lPool = networkRT->addPooling(*back_tens, PoolingType::kMAX, DimsHW{1, 1});
+				    checkNULL(lPool);
+					if(is_int8 == true)
+					{
+						lPool->setPrecision(DataType::kINT8);
+					}
+					lPool->setStride(DimsHW{1, 1});
+					run_on_dla(lPool);
+					tens[i] = lPool->getOutput(0);
+					lPool->getOutput(0)->setName( (l->getLayerName() + std::to_string(l->id) + "_pool"+ std::to_string(i)  + "Out").c_str() );	
+				}
 			}
         }  
     }

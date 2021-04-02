@@ -980,11 +980,11 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Shortcut *l) {
     else
     {
         // plugin version
-        IPlugin *plugin = new ShortcutRT(l->backLayer->output_dim);
+        IPluginExt *plugin = new ShortcutRT(l->backLayer->output_dim);
         ITensor **inputs = new ITensor*[2];
         inputs[0] = input;
         inputs[1] = back_tens; 
-        IPluginLayer *lRT = networkRT->addPlugin(inputs, 2, *plugin);
+        IPluginLayer *lRT = networkRT->addPluginExt(inputs, 2, *plugin);
         checkNULL(lRT);
         return lRT;
     }
@@ -1188,6 +1188,7 @@ IPlugin* PluginFactory::createPlugin(const char* layerName, const void* serialDa
         r->c = readBUF<int>(buf);
         r->h = readBUF<int>(buf);
         r->w = readBUF<int>(buf);
+        r->mDataType = readBUF<nvinfer1::DataType>(buf);
         return r;
     } 
 
@@ -1271,7 +1272,7 @@ IPlugin* PluginFactory::createPlugin(const char* layerName, const void* serialDa
         r->h = readBUF<int>(buf);
         r->w = readBUF<int>(buf);
         return r;
-    } 
+    }
 
     if(name.find("Route") == 0) {
         RouteRT *r = new RouteRT(readBUF<int>(buf),readBUF<int>(buf));

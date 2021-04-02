@@ -16,9 +16,9 @@ add_definitions(-DTKDNN_PATH="${CMAKE_CURRENT_SOURCE_DIR}")
 # CUDA
 #-------------------------------------------------------------------------------
 find_package(CUDA 9.0 REQUIRED)
-SET(CUDA_SEPARABLE_COMPILATION ON)
-#set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -arch=sm_30 --compiler-options '-fPIC'")
-set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --maxrregcount=32)
+#SET(CUDA_SEPARABLE_COMPILATION ON)
+set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -arch=sm_72 --maxrregcount=32)
+#set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --ptxas-options=-v --maxrregcount=32)
 
 find_package(CUDNN REQUIRED)
 include_directories(${CUDNN_INCLUDE_DIR})

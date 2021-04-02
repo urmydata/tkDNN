@@ -5,7 +5,7 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
-BatchStream::BatchStream(tk::dnn::dataDim_t dim, int batchSize, int maxBatches, const std::string& fileimglist, const std::string& filelabellist) {
+BatchStream::BatchStream(tk::dnn::dataDim_t dim, int batchSize, int maxBatches, const std::string& fileimglist) {
     mBatchSize = batchSize;
     mMaxBatches = maxBatches;
     mDims = nvinfer1::DimsNCHW{ dim.n, dim.c, dim.h, dim.w };
@@ -13,13 +13,9 @@ BatchStream::BatchStream(tk::dnn::dataDim_t dim, int batchSize, int maxBatches, 
     mWidth = dim.w;
     mImageSize = mDims.c()*mDims.h()*mDims.w();
     mBatch.resize(mBatchSize*mImageSize, 0);
-    mLabels.resize(mBatchSize, 0);
     mFileBatch.resize(mDims.n()*mImageSize, 0);
-    mFileLabels.resize(mDims.n(), 0);
     mFileImgList = fileimglist;
     readInListFile(fileimglist, mListImg);
-    mFileLabelList = filelabellist;
-    readInListFile(filelabellist, mListLabel);
 
     reset(0);
 }
@@ -43,7 +39,6 @@ bool BatchStream::next() {
 
         csize = std::min(mBatchSize - batchPos, mDims.n() - mFileBatchPos);
         std::copy_n(getFileBatch() + mFileBatchPos * mImageSize, csize * mImageSize, getBatch() + batchPos * mImageSize);
-        std::copy_n(getFileLabels() + mFileBatchPos, csize, getLabels() + batchPos);
     }
     mBatchCount++;
     return true;
@@ -130,22 +125,8 @@ void BatchStream::readCVimage(std::string inputFileName, std::vector<float>& res
     res.assign(m_LetterboxImage.begin<float>(), m_LetterboxImage.end<float>());
 }
 
-void BatchStream::readLabels(std::string inputFileName, std::vector<float>& ris) {
-    std::ifstream is(inputFileName.c_str());
-    
-    std::string line;
-    while (std::getline(is, line))
-    {
-        std::istringstream iss(line);
-        float val;
-        if(!(iss >> val)) { break; } // error
-        ris.push_back(val);
-    }
-}
-
 bool BatchStream::update() {
     std::string imgFileName = mListImg[mFileCount];
-    std::string labelFileName = mListLabel[mFileCount];
     mFileCount++;
 
     //read image
@@ -153,12 +134,6 @@ bool BatchStream::update() {
     readCVimage(imgFileName, mFileBatch);
     // std::transform(
     //     singleImg_rawData.begin(), singleImg_rawData.end(), mFileBatch.begin(), [](uint8_t val) { return static_cast<float>(val); });
-    
-    //read label
-    mFileLabels.clear();
-    readLabels(labelFileName, mFileLabels);
-    // std::transform(
-    //     singleLabels_rawData.begin(), singleLabels_rawData.end(), mFileLabels.begin(), [](uint8_t val) { return static_cast<float>(val); });
     
     mFileBatchPos = 0;
     return true;

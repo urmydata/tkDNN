@@ -2,6 +2,7 @@
 #define NETWORKRT_H
 
 #include <string.h> // memcpy
+#include <set>
 #include "utils.h"
 #include "Network.h"
 #include "Layer.h"
@@ -76,6 +77,7 @@ public:
     PluginFactory *pluginFactory;
 	NetworkRT(Network *net, const char *name, int start_index, int end_index, int dla_core);
     NetworkRT(Network *net, const char *name);
+	static std::set<int> getInputLayers(Network *net, int start_index, int end_index);
     virtual ~NetworkRT();
 
     int getMaxBatchSize() {

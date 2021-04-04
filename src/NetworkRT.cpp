@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <string.h> // memcpy
 #include <stdlib.h>
+#include <set>
 
 #include "kernels.h"
 
@@ -93,6 +94,60 @@ static void makeOutputMap(Network *net, std::map<int, std::list<int>>& output_ma
 		(it->second).sort();	
 	}
 }
+
+std::set<int> NetworkRT::getInputLayers(Network *net, int start_index, int end_index)
+{
+	std::set<int> inputLayerSet;
+	std::map<int, std::list<int>> output_map;
+	bool duplicated_input_flag = false;
+
+	makeOutputMap(net, output_map);
+
+	//add other layers
+	for(int i=0; i <= start_index; i++) {
+		Layer *l = net->layers[i];
+		if(i < start_index) {
+			std::map<int, std::list<int>>::iterator it;
+			it = output_map.find(l->id);
+			if(it != output_map.end()) {
+				std::list<int>::iterator it2;
+				for(it2 = (it->second).begin(); it2 != (it->second).end(); it2++) {
+					Layer *tl = net->layers[(*it2)];
+
+					if(tl->id >= start_index && tl->id <= end_index ) {
+						if(l->id == start_index - 1) {
+							if(!duplicated_input_flag) {
+								if(start_index > 0 ) {
+									inputLayerSet.insert(l->id);
+								}
+								duplicated_input_flag = true;
+							}
+						}
+						else {
+							if(inputLayerSet.find(l->id) == inputLayerSet.end())	{
+								inputLayerSet.insert(l->id);
+							}
+						}
+					}
+				}
+			}
+		}
+		else if(i == start_index && i > 0) {
+			Layer *lBefore = net->layers[i-1];
+			if(!(lBefore->getLayerType() == LAYER_ROUTE && ((Route *)lBefore)->layers_n == 1 && ((Route *)lBefore)->groups == 1))
+			{
+				if(!duplicated_input_flag) {
+					if(start_index > 0) {
+						inputLayerSet.insert(lBefore->id);
+					}
+				}
+			}
+		}
+	}
+
+	return inputLayerSet;
+}
+
 
 NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_index, int dla_core)
 {
@@ -246,7 +301,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 					{
 						if(!duplicated_input_flag) {
 							if(start_index > 0)
-								input = networkRT->addInput((lBefore->getLayerName() + std::to_string(i) + "_out").c_str(), DataType::kHALF, DimsCHW{ dim.c, dim.h, dim.w });
+								input = networkRT->addInput((lBefore->getLayerName() + std::to_string(lBefore->id) + "_out").c_str(), DataType::kHALF, DimsCHW{ dim.c, dim.h, dim.w });
 							else
 								input = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ dim.c, dim.h, dim.w });
 							checkNULL(input);

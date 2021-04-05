@@ -262,7 +262,14 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 							if(l->id == start_index - 1) {
 								if(!duplicated_input_flag) {
 									if(start_index > 0 ) {
- 										input_middle = networkRT->addInput((l->getLayerName() + std::to_string(i) + "_out").c_str(), DataType::kHALF, DimsCHW{ outdim.c, outdim.h, outdim.w });
+										nvinfer1::DataType inputDataType;
+										if(is_int8 == true) {
+											inputDataType = DataType::kINT8;
+										}
+										else {
+											inputDataType = DataType::kHALF;
+										}
+ 										input_middle = networkRT->addInput((l->getLayerName() + std::to_string(i) + "_out").c_str(), inputDataType, DimsCHW{ outdim.c, outdim.h, outdim.w });
 									}
 									else
 										input_middle = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ outdim.c, outdim.h, outdim.w });
@@ -277,7 +284,14 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 
 								if(tensors.find(l) == tensors.end())
 								{
-									input_middle = networkRT->addInput((l->getLayerName() + std::to_string(l->id) + "_out").c_str(), DataType::kHALF, DimsCHW{ outdim.c, outdim.h, outdim.w });
+									nvinfer1::DataType inputDataType;
+									if(is_int8 == true) {
+										inputDataType = DataType::kINT8;
+									}
+									else {
+										inputDataType = DataType::kHALF;
+									}
+									input_middle = networkRT->addInput((l->getLayerName() + std::to_string(l->id) + "_out").c_str(), inputDataType, DimsCHW{ outdim.c, outdim.h, outdim.w });
 									//input_middle = networkRT->addInput((l->getLayerName() + std::to_string(l->id) + "To" + std::to_string(tl->id) + "_out").c_str(), DataType::kHALF, DimsCHW{ outdim.c, outdim.h, outdim.w });
 									checkNULL(input_middle);
 									tensors[l] = input_middle;
@@ -300,8 +314,16 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 					else
 					{
 						if(!duplicated_input_flag) {
-							if(start_index > 0)
-								input = networkRT->addInput((lBefore->getLayerName() + std::to_string(lBefore->id) + "_out").c_str(), DataType::kHALF, DimsCHW{ dim.c, dim.h, dim.w });
+							if(start_index > 0) {
+								nvinfer1::DataType inputDataType;
+								if(is_int8 == true) {
+									inputDataType = DataType::kINT8;
+								}
+								else {
+									inputDataType = DataType::kHALF;
+								}
+								input = networkRT->addInput((lBefore->getLayerName() + std::to_string(lBefore->id) + "_out").c_str(), inputDataType, DimsCHW{ dim.c, dim.h, dim.w });
+							}
 							else
 								input = networkRT->addInput("data", DataType::kFLOAT, DimsCHW{ dim.c, dim.h, dim.w });
 							checkNULL(input);
@@ -367,7 +389,15 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 			if(it != tensors.end()) 
 			{
 				//if(shortcutLayer->backLayer->output_dim.c != shortcutLayer->output_dim.c) FatalError("Different shortcut size for output is not supported.");
-				it->second->setType(DataType::kHALF);
+				nvinfer1::DataType inputDataType;
+				if(is_int8 == true) {
+					inputDataType = DataType::kINT8;
+				}
+				else {
+					inputDataType = DataType::kHALF;
+				}
+
+				it->second->setType(inputDataType);
 				networkRT->markOutput(*(it->second));
 			}
 		}
@@ -378,7 +408,14 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 				Layer *currLayer = routeLayer->layers[iter];
 				std::map<Layer*, nvinfer1::ITensor*>::iterator it = tensors.find(currLayer);
 				if(it != tensors.end())  {
-					it->second->setType(DataType::kHALF);
+					nvinfer1::DataType inputDataType;
+					if(is_int8 == true) {
+						inputDataType = DataType::kINT8;
+					}
+					else {
+						inputDataType = DataType::kHALF;
+					}
+					it->second->setType(inputDataType);
 					networkRT->markOutput(*(it->second));
 				}
 			}
@@ -392,7 +429,15 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 	}
 	if(end_index + 1 < net->num_layers)
 	{
-		input->setType(DataType::kHALF);
+		nvinfer1::DataType inputDataType;
+		if(is_int8 == true) {
+			inputDataType = DataType::kINT8;
+		}
+		else {
+			inputDataType = DataType::kHALF;
+		}
+
+		input->setType(inputDataType);
 	}
 
 	networkRT->markOutput(*input);

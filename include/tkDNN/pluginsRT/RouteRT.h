@@ -3,7 +3,7 @@
 
 #include <cublas_v2.h>
 
-class RouteRT : public IPluginExt {
+class RouteRT : public IPluginV2IOExt {
 
 	/**
 		THIS IS NOT USED ANYMORE
@@ -70,6 +70,21 @@ public:
 				}
 			}
 		}
+		else if(mDataType == nvinfer1::DataType::kINT8)
+		{
+			char *dstData = reinterpret_cast<char*>(outputs[0]);
+
+			for(int b=0; b<batchSize; b++) {
+				int offset = 0;
+				for(int i=0; i<in; i++) {
+					char *input = (char*)reinterpret_cast<const char*>(inputs[i]);
+					int in_dim = c_in[i]*h*w;
+					int part_in_dim = in_dim / this->groups;
+   					checkCuda( cudaMemcpyAsync(dstData + b*c*w*h + offset, input + b*c*w*h*groups + this->group_id*part_in_dim, part_in_dim*sizeof(char), cudaMemcpyDeviceToDevice, stream) );
+					offset += part_in_dim;
+				}
+			}
+		}
 		else
 		{
 			__half *dstData = reinterpret_cast<__half*>(outputs[0]);
@@ -91,11 +106,11 @@ public:
 	}
 
 
-	virtual size_t getSerializationSize() override {
+	virtual size_t getSerializationSize() const override {
 		return (6+MAX_INPUTS)*sizeof(int) + sizeof(mDataType);
 	}
 
-	virtual void serialize(void* buffer) override {
+	virtual void serialize(void* buffer) const override {
 		char *buf = reinterpret_cast<char*>(buffer);
 		tk::dnn::writeBUF(buf, groups);
 		tk::dnn::writeBUF(buf, group_id);
@@ -109,11 +124,86 @@ public:
 		tk::dnn::writeBUF(buf, mDataType);
 	}
 
-	bool supportsFormat(nvinfer1::DataType type, nvinfer1::PluginFormat format) const override {
-		return ((type == nvinfer1::DataType::kFLOAT || type == nvinfer1::DataType::kHALF) && format == nvinfer1::PluginFormat::kNCHW);
+	bool supportsFormatCombination(int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) const override
+	{
+	    assert(nbInputs == 1 && nbOutputs == 1 && pos < nbInputs + nbOutputs);
+    	bool condition = inOut[pos].format == nvinfer1::TensorFormat::kLINEAR;
+	    condition &= inOut[pos].type != nvinfer1::DataType::kINT32;
+		//condition &= inOut[pos].format == nvinfer1::PluginFormat::kNCHW;
+	    condition &= inOut[pos].type == inOut[0].type;
+	    return condition;
 	}
 
-	void configureWithFormat(const Dims* inputDims, int32_t nbInputs, const Dims* outputDims, int32_t nbOutputs,
+    nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const override
+    {
+        assert(inputTypes && nbInputs == 1);
+        (void) index;
+        return inputTypes[0];
+    }
+
+    IPluginV2Ext* clone() const override
+    {
+        auto* plugin = new RouteRT(*this);
+        return plugin;
+    }
+
+	virtual void configurePlugin(const PluginTensorDesc* inTensor, int nbInputs, const PluginTensorDesc* outTensor, int nbOutput) override
+	{
+		assert(inTensor[0].type == outTensor[0].type);
+		assert(inTensor[0].format == nvinfer1::TensorFormat::kLINEAR && outTensor[0].format == nvinfer1::TensorFormat::kLINEAR);
+
+		in = nbInputs;
+		c = 0;
+		for(int i=0; i<nbInputs; i++) {
+			c_in[i] = inTensor[i].dims.d[0]; 
+			c += inTensor[i].dims.d[0];
+		}
+		h = inTensor[0].dims.d[1];
+		w = inTensor[0].dims.d[2];
+		c /= groups;
+		mDataType = inTensor[0].type;
+	}
+
+    const char* getPluginType() const override
+    {
+        return "Route";
+    }
+
+    const char* getPluginVersion() const override
+    {
+        return "2";
+    }
+
+    void destroy() override
+    {
+        delete this;
+    }
+
+    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const override
+    {
+        return false;
+    }
+
+    bool canBroadcastInputAcrossBatch(int inputIndex) const override
+    {
+        return false;
+    }
+
+   void setPluginNamespace(const char* libNamespace) override
+    {
+        mNamespace = libNamespace;
+    }
+
+    const char* getPluginNamespace() const override
+    {
+        return mNamespace.data();
+    }
+
+	/*bool supportsFormat(nvinfer1::DataType type, nvinfer1::PluginFormat format) const override {
+		return ((type == nvinfer1::DataType::kFLOAT || type == nvinfer1::DataType::kHALF || type == nvinfer1::DataType::kINT8) && format == nvinfer1::PluginFormat::kNCHW);
+	}*/
+
+	/*void configureWithFormat(const Dims* inputDims, int32_t nbInputs, const Dims* outputDims, int32_t nbOutputs,
 							         nvinfer1::DataType type, nvinfer1::PluginFormat format, int32_t maxBatchSize) override {
 		in = nbInputs;
 		c = 0;
@@ -125,7 +215,7 @@ public:
 		w = inputDims[0].d[2];
 		c /= groups;
 		mDataType = type;
-	}
+	}*/
 
 	static const int MAX_INPUTS = 4;
 	int in;
@@ -133,4 +223,5 @@ public:
 	int c, h, w;
 	int groups, group_id;
 	nvinfer1::DataType mDataType{nvinfer1::DataType::kFLOAT};
+	std::string mNamespace;
 };

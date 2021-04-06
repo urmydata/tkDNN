@@ -949,8 +949,8 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Route *l) {
     }
 
     if(l->groups > 1){
-        IPluginExt *plugin = new RouteRT(l->groups, l->group_id);
-        IPluginLayer *lRT = networkRT->addPluginExt(tens, l->layers_n, *plugin);
+        IPluginV2IOExt *plugin = new RouteRT(l->groups, l->group_id);
+        IPluginV2Layer *lRT = networkRT->addPluginV2(tens, l->layers_n, *plugin);
 		
         checkNULL(lRT);
         return lRT;
@@ -1107,6 +1107,18 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Upsample *l) {
     IPlugin *plugin = new UpsampleRT(l->stride);
     IPluginLayer *lRT = networkRT->addPlugin(&input, 1, *plugin);
     checkNULL(lRT);
+	/*float *deval = reinterpret_cast<float*>(malloc(sizeof(float) * l->output_dim.c * l->stride * l->stride));
+	for (int i = 0; i < l->output_dim.c * l->stride * l->stride; i++) {
+		deval[i] = 1.0;
+	}
+	Weights emptywts{DataType::kFLOAT, nullptr, 0};
+	Weights upsamplewts{DataType::kFLOAT, deval, l->output_dim.c * l->stride * l->stride};
+
+	IDeconvolutionLayer *lRT = networkRT->addDeconvolution(*input, l->output_dim.c, DimsHW{l->stride, l->stride}, upsamplewts, emptywts);
+    checkNULL(lRT);
+	lRT->setStrideNd(DimsHW{l->stride, l->stride});
+	lRT->setNbGroups(l->output_dim.c);*/
+
     return lRT;
 }
 
@@ -1212,7 +1224,7 @@ bool NetworkRT::deserialize(const char *filename, int dla_core) {
     size_t size{0};
     std::ifstream file(filename, std::ios::binary);
     if (file.good()) {
-        file.seekg(0, file.end);
+	file.seekg(0, file.end);
         size = file.tellg();
         file.seekg(0, file.beg);
         gieModelStream = new char[size];
@@ -1230,6 +1242,68 @@ bool NetworkRT::deserialize(const char *filename, int dla_core) {
 
     return true;
 }
+
+class RoutePluginV2Creator : public IPluginCreator
+{
+	public:
+		const char* getPluginName() const override
+		{
+			return "Route";
+		}
+
+		const char* getPluginVersion() const override
+		{
+			return "2";
+		}
+
+		const PluginFieldCollection* getFieldNames() override
+		{
+			return &mFieldCollection;
+		}
+
+		IPluginV2* createPlugin(const char* name, const PluginFieldCollection* fc) override
+		{
+			auto plugin = new RouteRT(2, 1);
+			mFieldCollection = *fc;
+			mPluginName = name;
+			return plugin;
+		}
+
+		IPluginV2* deserializePlugin(const char* name, const void* serialData, size_t serialLength) override
+		{
+			/*auto plugin = new RouteRT(serialData, serialLength);
+			  mPluginName = name;
+			  return plugin;*/
+			const char * buf = reinterpret_cast<const char*>(serialData);
+
+			RouteRT *r = new RouteRT(readBUF<int>(buf),readBUF<int>(buf));
+			r->in = readBUF<int>(buf);
+			for(int i=0; i<RouteRT::MAX_INPUTS; i++)
+				r->c_in[i] = readBUF<int>(buf);
+			r->c = readBUF<int>(buf);
+			r->h = readBUF<int>(buf);
+			r->w = readBUF<int>(buf);
+			r->mDataType = readBUF<nvinfer1::DataType>(buf);
+			return r;
+		}
+
+		void setPluginNamespace(const char* libNamespace) override
+		{
+			mNamespace = libNamespace;
+		}
+
+		const char* getPluginNamespace() const override
+		{
+			return mNamespace.c_str();
+		}
+
+	private:
+		std::string mNamespace;
+		std::string mPluginName;
+		PluginFieldCollection mFieldCollection{0, nullptr};
+};
+
+REGISTER_TENSORRT_PLUGIN(RoutePluginV2Creator);
 
 IPlugin* PluginFactory::createPlugin(const char* layerName, const void* serialData, size_t serialLength) {
     const char * buf = reinterpret_cast<const char*>(serialData);
@@ -1374,7 +1448,7 @@ IPlugin* PluginFactory::createPlugin(const char* layerName, const void* serialDa
         return r;
     }
 
-    if(name.find("Route") == 0) {
+    /*if(name.find("Route") == 0) {
         RouteRT *r = new RouteRT(readBUF<int>(buf),readBUF<int>(buf));
         r->in = readBUF<int>(buf);
         for(int i=0; i<RouteRT::MAX_INPUTS; i++)
@@ -1384,7 +1458,7 @@ IPlugin* PluginFactory::createPlugin(const char* layerName, const void* serialDa
         r->w = readBUF<int>(buf);
 		r->mDataType = readBUF<nvinfer1::DataType>(buf);
         return r;
-    } 
+    }*/
 
     if(name.find("Deformable") == 0) {
         DeformableConvRT *r = new DeformableConvRT(readBUF<int>(buf), readBUF<int>(buf), readBUF<int>(buf),

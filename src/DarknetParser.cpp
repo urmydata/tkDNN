@@ -40,6 +40,8 @@ namespace tk { namespace dnn {
 
         if(name.find("new_coords") !=  std::string::npos)
             fields.new_coords = std::stoi(value);
+        else if(name.find("letter_box") !=  std::string::npos)
+            fields.letter_box = std::stoi(value);
         else if(name.find("width") !=  std::string::npos)
             fields.width = std::stoi(value);
         else if(name.find("height") !=  std::string::npos)
@@ -106,7 +108,7 @@ namespace tk { namespace dnn {
     tk::dnn::Network *darknetAddNet(darknetFields_t &fields) {
         //std::cout<<"Add Net: "<<fields.type<<"\n";
         dataDim_t dim(1, fields.channels, fields.height, fields.width);
-        return new tk::dnn::Network(dim);
+        return new tk::dnn::Network(dim, (bool) fields.letter_box);
     }
 
 

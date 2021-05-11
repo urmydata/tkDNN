@@ -7,7 +7,7 @@
 
 namespace tk { namespace dnn {
 
-Network::Network(dataDim_t input_dim) {
+Network::Network(dataDim_t input_dim, bool letter_box) {
     this->input_dim = input_dim;
 
     float tk_ver = float(TKDNN_VERSION)/1000;
@@ -20,6 +20,7 @@ Network::Network(dataDim_t input_dim) {
     dontLoadWeights = false;
     num_layers = 0;
 	num_calib_images = 100;
+	letterBox = letter_box;
 
     fp16 = true;
     dla = false;

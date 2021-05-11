@@ -38,7 +38,8 @@ const int MAX_LAYERS = 512;
 class Network {
 
 public:
-    Network(dataDim_t input_dim);
+    //Network(dataDim_t input_dim);
+    Network(dataDim_t input_dim, bool letter_box=false);
     virtual ~Network();
     void releaseLayers();
 
@@ -66,6 +67,7 @@ public:
 	int num_calib_images;
     int maxBatchSize;
     bool dontLoadWeights;
+    bool letterBox;
     std::string fileImgList;
     std::string fileLabelList;
     std::string networkName;

@@ -172,6 +172,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 	configRT = builderRT->createBuilderConfig();
 #endif
 
+	startIndex = start_index;
 	if(net->dla) {
 		is_dla = true;	
 	}
@@ -261,7 +262,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 
 							if(l->id == start_index - 1) {
 								if(!duplicated_input_flag) {
-									if(start_index > 0 ) {
+									if(start_index > 0) {
 										nvinfer1::DataType inputDataType;
 										if(is_int8 == true) {
 											inputDataType = DataType::kINT8;
@@ -1059,7 +1060,7 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Shortcut *l) {
 
     if(l->backLayer->output_dim.c == l->output_dim.c)
     {
-		if(is_dla == true)
+		if(is_dla == true && l->backLayer->id >= startIndex)
 		{
 			IPoolingLayer *lPool = networkRT->addPooling(*back_tens, PoolingType::kMAX, DimsHW{1, 1});
 			if(is_int8 == true)

@@ -70,6 +70,7 @@ public:
     int buf_input_idx, buf_output_idx;
 	bool is_dla = false;
 	bool is_int8 = false;
+	int startIndex = 0;
     dataDim_t input_dim, output_dim;
     dnnType *output;
     cudaStream_t stream;

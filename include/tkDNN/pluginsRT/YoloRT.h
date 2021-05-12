@@ -61,24 +61,19 @@ public:
 
 		dnnType *srcData = (dnnType*)reinterpret_cast<const dnnType*>(inputs[0]);
 		dnnType *dstData = reinterpret_cast<dnnType*>(outputs[0]);
+		int mask_offset = w * h * (4 + classes + 1);
 
 		checkCuda( cudaMemcpyAsync(dstData, srcData, batchSize*c*h*w*sizeof(dnnType), cudaMemcpyDeviceToDevice, stream));
 
-		for (int b = 0; b < batchSize; ++b){
-			for(int n = 0; n < n_masks; ++n){
-				int index = entry_index(b, n*w*h, 0);
-				if (new_coords == 1){
-					if (this->scaleXY != 1) scalAdd(dstData + index, 2 * w*h, this->scaleXY, -0.5*(this->scaleXY - 1), 1);
-				}
-				else{
-					activationLOGISTICForward(srcData + index, dstData + index, 2*w*h, stream); //x,y
+		if(new_coords == 1) {
+			if (this->scaleXY != 1) scalAddMasks(dstData, batchSize, 2*w*h, this->scaleXY, -0.5*(this->scaleXY - 1), 1, n_masks, mask_offset, stream);
+		}
+		else {
+			activationLOGISTICForwardMasks(srcData, dstData, batchSize, 2*w*h, 0, n_masks, mask_offset, stream); //x,y
 
-					if (this->scaleXY != 1) scalAdd(dstData + index, 2 * w*h, this->scaleXY, -0.5*(this->scaleXY - 1), 1);
-				
-					index = entry_index(b, n*w*h, 4);
-					activationLOGISTICForward(srcData + index, dstData + index, (1+classes)*w*h, stream);
-				}
-			}
+			if (this->scaleXY != 1) scalAddMasks(dstData, batchSize, 2*w*h, this->scaleXY, -0.5*(this->scaleXY - 1), 1, n_masks, mask_offset, stream);
+
+			activationLOGISTICForwardMasks(srcData, dstData, batchSize, (1+classes)*w*h, 4*w*h, n_masks, mask_offset, stream);
 		}
 
 		//std::cout<<"YOLO END\n";

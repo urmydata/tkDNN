@@ -53,4 +53,7 @@ void dcnV2CudaForward(cublasStatus_t stat, cublasHandle_t handle,
                          const int dst_dim, cudaStream_t stream = cudaStream_t(0));
 
 void scalAdd(dnnType* dstData, int size, float alpha, float beta, int inc, cudaStream_t stream = cudaStream_t(0));
+void scalAddMasks(dnnType* dstData, int batch, int size, float alpha, float beta, int inc, int n_masks, int mask_offset, cudaStream_t stream = cudaStream_t(0));
+void activationLOGISTICForwardMasks(dnnType* srcData, dnnType* dstData, int batch, int size, int offset, int n_masks, int mask_offset, cudaStream_t stream);
+
 #endif //KERNELS_H

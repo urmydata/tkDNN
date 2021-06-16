@@ -220,7 +220,7 @@ void CenternetDetection::preprocess(cv::Mat &frame, const int bi){
     // std::cout << " TIME Memcpy to input_d: " << std::chrono::duration_cast<std::chrono:: microseconds>(end_t - step_t).count() << "  us" << std::endl;
     // step_t = end_t;
 #else
- 
+
     cv::Mat imageF;
     resize(frame, imageF, cv::Size(new_width, new_height));
     sz = imageF.size();
@@ -273,7 +273,7 @@ void CenternetDetection::postprocess(const int bi, const bool mAP){
     // auto step_t = std::chrono::steady_clock::now();
     // auto end_t = std::chrono::steady_clock::now();
     // ------------------------------------ process --------------------------------------------
-    activationSIGMOIDForward(rt_out[0], rt_out[0], dim_hm.tot());
+    //activationSIGMOIDForward(rt_out[0], rt_out[0], dim_hm.tot());
     checkCuda( cudaDeviceSynchronize() );
 
     subtractWithThreshold(rt_out[0], rt_out[0] + dim_hm.tot(), rt_out[1], rt_out[0], op);

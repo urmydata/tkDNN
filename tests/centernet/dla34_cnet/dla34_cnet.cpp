@@ -449,10 +449,10 @@ int main()
     tk::dnn::Conv2d     *hm_conv1 = new tk::dnn::Conv2d(&net, 256, 3, 3, 1, 1, 1, 1, hm_conv1_bin, false);
     tk::dnn::Activation *hm_relu1      = new tk::dnn::Activation(&net, CUDNN_ACTIVATION_RELU);
     tk::dnn::Conv2d     *hm = new tk::dnn::Conv2d(&net, 80, 1, 1, 1, 1, 0, 0, hm_conv2_bin, false);
-    hm->setFinal();
     int kernel = 3; 
     int pad = (kernel - 1)/2;
-    tk::dnn::Activation *hm_sig      = new tk::dnn::Activation(&net, CUDNN_ACTIVATION_SIGMOID);
+    tk::dnn::Activation *hm_sig      = new tk::dnn::Activation(&net, tk::dnn::ACTIVATION_LOGISTIC);
+    hm_sig->setFinal();
     tk::dnn::Pooling  *hmax                 = new tk::dnn::Pooling(&net, kernel, kernel, 1, 1, pad, pad, tk::dnn::POOLING_MAX);
     hmax->setFinal();
 

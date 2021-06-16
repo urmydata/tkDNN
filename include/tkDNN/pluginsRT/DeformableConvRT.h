@@ -87,10 +87,10 @@ public:
 
 		// split conv2d outputs into offset to mask
 		for(int b=0; b<batchSize; b++) {
-			checkCuda(cudaMemcpy(offset, output_conv + b * 3 * chunk_dim, 2*chunk_dim*sizeof(dnnType), cudaMemcpyDeviceToDevice)); 
-			checkCuda(cudaMemcpy(mask, output_conv + b * 3 * chunk_dim + 2*chunk_dim, chunk_dim*sizeof(dnnType), cudaMemcpyDeviceToDevice)); 
+			checkCuda(cudaMemcpyAsync(offset, output_conv + b * 3 * chunk_dim, 2*chunk_dim*sizeof(dnnType), cudaMemcpyDeviceToDevice, stream)); 
+			checkCuda(cudaMemcpyAsync(mask, output_conv + b * 3 * chunk_dim + 2*chunk_dim, chunk_dim*sizeof(dnnType), cudaMemcpyDeviceToDevice, stream)); 
 			// kernel sigmoid
-			activationSIGMOIDForward(mask, mask, chunk_dim);
+			activationSIGMOIDForward(mask, mask, chunk_dim, stream);
 			// deformable convolution
 			dcnV2CudaForward(stat, handle, 
 								srcData, data_d,
@@ -104,7 +104,7 @@ public:
 								deformableGroup, b,
 								i_n, i_c, i_h, i_w,
 								o_n, o_c, o_h, o_w,
-								chunk_dim);
+								chunk_dim, stream);
 		}
 		return 0;
 	}

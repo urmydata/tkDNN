@@ -56,8 +56,8 @@ public:
 
     int id = 0;
     bool final;        //if the layer is the final one
-    uint n_params = 0;
-    uint feature_map_size = 0;
+    unsigned int n_params = 0;
+    unsigned int feature_map_size = 0;
     long unsigned MACC = 0;
 
 
@@ -423,6 +423,8 @@ public:
     virtual layerType_t getLayerType() { return LAYER_FLATTEN; };
 
     virtual dnnType* infer(dataDim_t &dim, dnnType* srcData);
+
+    int c, h, w, rows, cols;
 };
 
 /**
@@ -436,6 +438,7 @@ public:
     virtual layerType_t getLayerType() { return LAYER_RESHAPE; };
 
     virtual dnnType* infer(dataDim_t &dim, dnnType* srcData);
+    int n,c,h,w;
 
 };
 
@@ -497,6 +500,7 @@ public:
     int winH, winW;
     int strideH, strideW;
     int paddingH, paddingW;
+    int padding;
     bool size;
     tkdnnPoolingMode_t pool_mode;
 
@@ -582,6 +586,8 @@ public:
 
     virtual dnnType* infer(dataDim_t &dim, dnnType* srcData);
 
+    int c,h,w;
+
 public:
     Layer *backLayer;
     bool mul = false;
@@ -602,6 +608,7 @@ public:
 
     int stride;
     bool reverse;
+    int c,h,w;
 };
 
 struct box {
@@ -685,6 +692,7 @@ public:
     virtual layerType_t getLayerType() { return LAYER_REGION; };
 
     int classes, coords, num;
+    int c,h,w;
     
     virtual dnnType* infer(dataDim_t &dim, dnnType* srcData);
 };

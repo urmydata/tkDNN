@@ -1,109 +1,110 @@
+#ifndef _SHORTCUTRT_PLUGIN_H
+#define _SHORTCUTRT_PLUGIN_H
+
 #include<cassert>
 #include "../kernels.h"
+#include <NvInfer.h>
+#include <vector>
+#include <tkdnn.h>
+
 
 #include <cublas_v2.h>
-
-class ShortcutRT : public IPluginExt {
+namespace nvinfer1 {
+	class ShortcutRT : public IPluginV2Ext {
 
 public:
+        ShortcutRT(int bc,int bh,int bw,int c,int h,int w ,bool mul);
 
-	ShortcutRT(tk::dnn::dataDim_t bdim, bool mul) {
-		this->bc = bdim.c;
-		this->bh = bdim.h;
-		this->bw = bdim.w;
-		this->mul = mul;
-	}
+        ~ShortcutRT();
 
-	~ShortcutRT(){
+        ShortcutRT(const void *data, size_t length);
 
-	}
+        int getNbOutputs() const NOEXCEPT override;
 
-	int getNbOutputs() const override {
-		return 1;
-	}
+        Dims getOutputDimensions(int index, const Dims *inputs, int nbInputDims) NOEXCEPT override;
 
-	Dims getOutputDimensions(int index, const Dims* inputs, int nbInputDims) override {
-		return DimsCHW{inputs[0].d[0], inputs[0].d[1], inputs[0].d[2]};
-	}
+        void configurePlugin (Dims const *inputDims, int32_t nbInputs, Dims const *outputDims, int32_t nbOutputs,
+                              DataType const *inputTypes, DataType const *outputTypes, bool const *inputIsBroadcast,
+                              bool const *outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) NOEXCEPT override;
 
-	/*void configure(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs, int maxBatchSize) override {
-		c = inputDims[0].d[0];
-		h = inputDims[0].d[1];
-		w = inputDims[0].d[2];
+        bool isOutputBroadcastAcrossBatch (int32_t outputIndex, bool const *inputIsBroadcasted, int32_t nbInputs) const NOEXCEPT override;
 
-	}*/
+        bool canBroadcastInputAcrossBatch (int32_t inputIndex) const NOEXCEPT override;
 
-	int initialize() override {
+        void attachToContext (cudnnContext *, cublasContext *, IGpuAllocator *) NOEXCEPT override;
 
-		return 0;
-	}
+        void detachFromContext () NOEXCEPT override;
 
-	virtual void terminate() override {
-	}
+        DataType getOutputDataType(int32_t index, nvinfer1::DataType const *inputTypes, int32_t nbInputs) const NOEXCEPT override;
 
-	virtual size_t getWorkspaceSize(int maxBatchSize) const override {
-		return 0;
-	}
+        int initialize() NOEXCEPT override;
 
-	virtual int enqueue(int batchSize, const void*const * inputs, void** outputs, void* workspace, cudaStream_t stream) override {
-		if(mDataType == nvinfer1::DataType::kFLOAT)
-		{
-			dnnType *srcData = (dnnType*)reinterpret_cast<const dnnType*>(inputs[0]);
-			dnnType *srcDataBack = (dnnType*)reinterpret_cast<const dnnType*>(inputs[1]);
-			dnnType *dstData = reinterpret_cast<dnnType*>(outputs[0]);
+        void terminate() NOEXCEPT override;
 
-			checkCuda( cudaMemcpyAsync(dstData, srcData, batchSize*c*h*w*sizeof(dnnType), cudaMemcpyDeviceToDevice, stream));
-			for(int b=0; b < batchSize; ++b)
-				shortcutForward(srcDataBack + b*bc*bh*bw, dstData + b*c*h*w, 1, c, h, w, 1, 1, bc, bh, bw, 1, mul, stream);
-		}
-		else
-		{
-			__half *srcData = (__half*)reinterpret_cast<const __half*>(inputs[0]);
-			__half *srcDataBack = (__half*)reinterpret_cast<const __half*>(inputs[1]);
-			__half *dstData = reinterpret_cast<__half*>(outputs[0]);
+        size_t getWorkspaceSize(int maxBatchSize) const NOEXCEPT override;
 
-			checkCuda( cudaMemcpyAsync(dstData, srcData, batchSize*c*h*w*sizeof(__half), cudaMemcpyDeviceToDevice, stream));
-			for(int b=0; b < batchSize; ++b)
-				shortcutForwardHalf(srcDataBack + b*bc*bh*bw, dstData + b*c*h*w, 1, c, h, w, 1, 1, bc, bh, bw, 1, stream);
-		}
-
-		return 0;
-	}
+#if NV_TENSORRT_MAJOR > 7
+        int enqueue(int batchSize, const void *const *inputs, void *const *outputs, void *workspace,
+                    cudaStream_t stream) NOEXCEPT override;
+#elif NV_TENSORRT_MAJOR == 7
+        int32_t enqueue (int32_t batchSize, const void *const *inputs, void **outputs, void *workspace, cudaStream_t stream) override;
+#endif
 
 
-	virtual size_t getSerializationSize() override {
-		return 6*sizeof(int) + sizeof(bool) + sizeof(mDataType);
-	}
+        size_t getSerializationSize() const NOEXCEPT override;
 
-	virtual void serialize(void* buffer) override {
-		char *buf = reinterpret_cast<char*>(buffer),*a=buf;
-		tk::dnn::writeBUF(buf, bc);
-		tk::dnn::writeBUF(buf, bh);
-		tk::dnn::writeBUF(buf, bw);
-		tk::dnn::writeBUF(buf, mul);
-		tk::dnn::writeBUF(buf, c);
-		tk::dnn::writeBUF(buf, h);
-		tk::dnn::writeBUF(buf, w);
+        void serialize(void *buffer) const NOEXCEPT override;
 
-		tk::dnn::writeBUF(buf, mDataType);
-		assert(buf == a + getSerializationSize());
-		
-	}
+        bool supportsFormat(DataType type, PluginFormat format) const NOEXCEPT override;
 
-	bool supportsFormat(nvinfer1::DataType type, nvinfer1::PluginFormat format) const override {
-		return ((type == nvinfer1::DataType::kFLOAT || type == nvinfer1::DataType::kHALF) && format == nvinfer1::PluginFormat::kNCHW);
-	}
+        const char *getPluginType() const NOEXCEPT override;
 
-	void configureWithFormat(const Dims* inputDims, int32_t nbInputs, const Dims* outputDims, int32_t nbOutputs,
-							         nvinfer1::DataType type, nvinfer1::PluginFormat format, int32_t maxBatchSize) override {
-		c = inputDims[0].d[0];
-		h = inputDims[0].d[1];
-		w = inputDims[0].d[2];
-		mDataType = type;
-	}
+        const char *getPluginVersion() const NOEXCEPT override;
+
+        void destroy() NOEXCEPT override;
+
+        const char *getPluginNamespace() const NOEXCEPT override;
+
+        void setPluginNamespace(const char *pluginNamespace) NOEXCEPT override;
+
+        IPluginV2Ext *clone() const NOEXCEPT override;
 
 	int c, h, w;
-	int bc, bh, bw;
-	nvinfer1::DataType mDataType{nvinfer1::DataType::kFLOAT};
+	int bc, bh, bw, bl;
+	DataType mDataType{nvinfer1::DataType::kFLOAT};
 	bool mul;
+        tk::dnn::dataDim_t bDim;
+    private:
+        std::string mPluginNamespace;
 };
+
+
+    class ShortcutRTPluginCreator : public IPluginCreator {
+    public:
+        ShortcutRTPluginCreator();
+
+        void setPluginNamespace(const char *pluginNamespace) NOEXCEPT override;
+
+        const char *getPluginNamespace() const NOEXCEPT override;
+
+        IPluginV2Ext *deserializePlugin(const char *name, const void *serialData, size_t serialLength) NOEXCEPT override;
+
+        IPluginV2Ext *createPlugin(const char *name, const PluginFieldCollection *fc) NOEXCEPT override;
+
+        const char *getPluginName() const NOEXCEPT override;
+
+        const char *getPluginVersion() const NOEXCEPT override;
+
+        const PluginFieldCollection *getFieldNames() NOEXCEPT override;
+
+    public:
+        static PluginFieldCollection mFC;
+        static std::vector<PluginField> mPluginAttributes;
+        std::string mPluginNamespace;
+    };
+
+    REGISTER_TENSORRT_PLUGIN(ShortcutRTPluginCreator);
+
+};
+
+#endif

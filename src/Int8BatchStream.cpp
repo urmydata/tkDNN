@@ -8,12 +8,12 @@
 BatchStream::BatchStream(tk::dnn::dataDim_t dim, int batchSize, int maxBatches, const std::string& fileimglist) {
     mBatchSize = batchSize;
     mMaxBatches = maxBatches;
-    mDims = nvinfer1::DimsNCHW{ dim.n, dim.c, dim.h, dim.w };
+    mDims = nvinfer1::Dims4{ dim.n, dim.c, dim.h, dim.w };
     mHeight = dim.h;
     mWidth = dim.w;
-    mImageSize = mDims.c()*mDims.h()*mDims.w();
+    mImageSize = mDims.d[1]*mDims.d[2]*mDims.d[3];
     mBatch.resize(mBatchSize*mImageSize, 0);
-    mFileBatch.resize(mDims.n()*mImageSize, 0);
+    mFileBatch.resize(mDims.d[0]*mImageSize, 0);
     mFileImgList = fileimglist;
     readInListFile(fileimglist, mListImg);
 
@@ -23,7 +23,7 @@ BatchStream::BatchStream(tk::dnn::dataDim_t dim, int batchSize, int maxBatches, 
 void BatchStream::reset(int firstBatch) {
     mBatchCount = 0;
     mFileCount = 0;
-    mFileBatchPos = mDims.n();
+    mFileBatchPos = mDims.d[0];
     skip(firstBatch);
 }
 
@@ -33,11 +33,11 @@ bool BatchStream::next() {
         return false;
 
     for (int csize = 1, batchPos = 0; batchPos < mBatchSize; batchPos += csize, mFileBatchPos += csize) {
-        assert(mFileBatchPos > 0 && mFileBatchPos <= mDims.n());
-        if (mFileBatchPos == mDims.n() && !update())
+        assert(mFileBatchPos > 0 && mFileBatchPos <= mDims.d[0]);
+        if (mFileBatchPos == mDims.d[0] && !update())
             return false;
 
-        csize = std::min(mBatchSize - batchPos, mDims.n() - mFileBatchPos);
+        csize = std::min(mBatchSize - batchPos, mDims.d[0] - mFileBatchPos);
         std::copy_n(getFileBatch() + mFileBatchPos * mImageSize, csize * mImageSize, getBatch() + batchPos * mImageSize);
     }
     mBatchCount++;
@@ -45,8 +45,8 @@ bool BatchStream::next() {
 }
 
 void BatchStream::skip(int skipCount) {
-    if (mBatchSize >= mDims.n() && mBatchSize%mDims.n() == 0 && mFileBatchPos == mDims.n()) {
-        mFileCount += skipCount * mBatchSize / mDims.n();
+    if (mBatchSize >= mDims.d[0] && mBatchSize%mDims.d[0] == 0 && mFileBatchPos == mDims.d[0]) {
+        mFileCount += skipCount * mBatchSize / mDims.d[0];
         return;
     }
 

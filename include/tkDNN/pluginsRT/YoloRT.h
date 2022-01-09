@@ -1,121 +1,78 @@
+#ifndef _YOLORT_PLUGIN_H
+#define _YOLORT_PLUGIN_H
+
 #include<cassert>
+#include <vector>
 #include "../kernels.h"
+#include <NvInfer.h>
+#include <tkdnn.h>
 
 #define YOLORT_CLASSNAME_W 256
 
-class YoloRT : public IPlugin {
+namespace nvinfer1 {
+    class YoloRT : public IPluginV2Ext {
+
+    public:
+        YoloRT(int classes, int num,int c,int h,int w, int n_masks = 3, float scale_xy = 1,
+               float nms_thresh = 0.45, int nms_kind = 0, int new_coords = 0);
+
+        YoloRT(const void *data, size_t length);
+
+        ~YoloRT();
 
 
+        int getNbOutputs() const NOEXCEPT override;
 
-public:
-	YoloRT(int classes, int num, tk::dnn::Yolo *yolo = nullptr, int n_masks=3, float scale_xy=1, float nms_thresh=0.45, int nms_kind=0, int new_coords=0) {
+        Dims getOutputDimensions(int index, const Dims *inputs, int nbInputDims) NOEXCEPT override;
 
-		this->classes = classes;
-		this->num = num;
-		this->n_masks = n_masks;
-		this->scaleXY = scale_xy;
-		this->nms_thresh = nms_thresh;
-		this->nms_kind = nms_kind;
-		this->new_coords = new_coords;
+        int initialize() NOEXCEPT override;
 
-        mask = new dnnType[n_masks];
-        bias = new dnnType[num*n_masks*2];
-        if(yolo != nullptr) {
-            memcpy(mask, yolo->mask_h, sizeof(dnnType)*n_masks);
-            memcpy(bias, yolo->bias_h, sizeof(dnnType)*num*n_masks*2);
-			classesNames = yolo->classesNames;
-        }
-	}
+        void terminate() NOEXCEPT override;
 
-	~YoloRT(){
-
-	}
-
-	int getNbOutputs() const override {
-		return 1;
-	}
-
-	Dims getOutputDimensions(int index, const Dims* inputs, int nbInputDims) override {
-		return inputs[0];
-	}
-
-	void configure(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs, int maxBatchSize) override {
-		c = inputDims[0].d[0];
-		h = inputDims[0].d[1];
-		w = inputDims[0].d[2];
-	}
-
-	int initialize() override {
-
-		return 0;
-	}
-
-	virtual void terminate() override {
-	}
-
-	virtual size_t getWorkspaceSize(int maxBatchSize) const override {
-		return 0;
-	}
-
-	virtual int enqueue(int batchSize, const void*const * inputs, void** outputs, void* workspace, cudaStream_t stream) override {
-
-		dnnType *srcData = (dnnType*)reinterpret_cast<const dnnType*>(inputs[0]);
-		dnnType *dstData = reinterpret_cast<dnnType*>(outputs[0]);
-		int mask_offset = w * h * (4 + classes + 1);
-
-		checkCuda( cudaMemcpyAsync(dstData, srcData, batchSize*c*h*w*sizeof(dnnType), cudaMemcpyDeviceToDevice, stream));
-
-		if(new_coords == 1) {
-			if (this->scaleXY != 1) scalAddMasks(dstData, batchSize, 2*w*h, this->scaleXY, -0.5*(this->scaleXY - 1), 1, n_masks, mask_offset, stream);
-		}
-		else {
-			activationLOGISTICForwardMasks(srcData, dstData, batchSize, 2*w*h, 0, n_masks, mask_offset, stream); //x,y
-
-			if (this->scaleXY != 1) scalAddMasks(dstData, batchSize, 2*w*h, this->scaleXY, -0.5*(this->scaleXY - 1), 1, n_masks, mask_offset, stream);
-
-			activationLOGISTICForwardMasks(srcData, dstData, batchSize, (1+classes)*w*h, 4*w*h, n_masks, mask_offset, stream);
-		}
-
-		//std::cout<<"YOLO END\n";
-		return 0;
-	}
+        size_t getWorkspaceSize(int maxBatchSize) const NOEXCEPT override;
 
 
-	virtual size_t getSerializationSize() override {
-		return 8*sizeof(int) + 2*sizeof(float)+ n_masks*sizeof(dnnType) + num*n_masks*2*sizeof(dnnType) + YOLORT_CLASSNAME_W*classes*sizeof(char);
-	}
+#if NV_TENSORRT_MAJOR > 7
+        int enqueue(int batchSize, const void *const *inputs, void *const *outputs, void *workspace,
+                            cudaStream_t stream) NOEXCEPT override;
+#elif NV_TENSORRT_MAJOR == 7
+        int32_t enqueue (int32_t batchSize, const void *const *inputs, void **outputs, void *workspace, cudaStream_t stream) override;
+#endif
 
-	virtual void serialize(void* buffer) override {
-		char *buf = reinterpret_cast<char*>(buffer),*a=buf;
-		tk::dnn::writeBUF(buf, classes); 	//std::cout << "Classes :" << classes << std::endl;
-		tk::dnn::writeBUF(buf, num); 		//std::cout << "Num : " << num << std::endl;
-		tk::dnn::writeBUF(buf, n_masks); 	//std::cout << "N_Masks" << n_masks << std::endl;
-		tk::dnn::writeBUF(buf, scaleXY); 	//std::cout << "ScaleXY :" << scaleXY << std::endl;
-		tk::dnn::writeBUF(buf, nms_thresh); //std::cout << "nms_thresh :" << nms_thresh << std::endl;
-		tk::dnn::writeBUF(buf, nms_kind); 	//std::cout << "nms_kind : " << nms_kind << std::endl;
-		tk::dnn::writeBUF(buf, new_coords); //std::cout << "new_coords : " << new_coords << std::endl;
-		tk::dnn::writeBUF(buf, c); 			//std::cout << "C : " << c << std::endl;
-		tk::dnn::writeBUF(buf, h); 			//std::cout << "H : " << h << std::endl;
-		tk::dnn::writeBUF(buf, w); 			//std::cout << "C : " << c << std::endl;
-		for (int i = 0; i < n_masks; i++)
-		{
-			tk::dnn::writeBUF(buf, mask[i]); //std::cout << "mask[i] : " << mask[i] << std::endl;
-		}
-		for (int i = 0; i < n_masks * 2 * num; i++)
-		{
-			tk::dnn::writeBUF(buf, bias[i]); //std::cout << "bias[i] : " << bias[i] << std::endl;
-		}
 
-		// save classes names
-		for(int i=0; i<classes; i++) {
-			char tmp[YOLORT_CLASSNAME_W];
-			strcpy(tmp, classesNames[i].c_str());
-			for(int j=0; j<YOLORT_CLASSNAME_W; j++) {
-				tk::dnn::writeBUF(buf, tmp[j]);
-			}
-		}
-		assert(buf == a + getSerializationSize());
-	}
+        size_t getSerializationSize() const NOEXCEPT override;
+
+        bool supportsFormat(DataType type, PluginFormat format) const NOEXCEPT override;
+
+        void serialize(void *buffer) const NOEXCEPT override;
+
+        const char *getPluginType() const NOEXCEPT override;
+
+        const char *getPluginVersion() const NOEXCEPT override;
+
+        void destroy() NOEXCEPT override;
+
+        const char *getPluginNamespace() const NOEXCEPT override;
+
+        void setPluginNamespace(const char *pluginNamespace) NOEXCEPT override;
+
+        IPluginV2Ext *clone() const NOEXCEPT override;
+
+        DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const NOEXCEPT override;
+
+        void attachToContext(cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) NOEXCEPT override;
+
+        bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const NOEXCEPT override;
+
+        bool canBroadcastInputAcrossBatch(int inputIndex) const NOEXCEPT override;
+
+        void configurePlugin (Dims const *inputDims, int32_t nbInputs, Dims const *outputDims,
+                              int32_t nbOutputs, DataType const *inputTypes, DataType const *outputTypes,
+                              bool const *inputIsBroadcast, bool const *outputIsBroadcast, PluginFormat floatFormat,
+                              int32_t maxBatchSize) NOEXCEPT override;
+
+        void detachFromContext() NOEXCEPT override;
+
 
 	int c, h, w;
     int classes, num, n_masks;
@@ -123,10 +80,9 @@ public:
 	float nms_thresh;
 	int nms_kind;
 	int new_coords;
+        int NUM = 0;
 	std::vector<std::string> classesNames;
 
-    dnnType *mask;
-    dnnType *bias;
 
 	int entry_index(int batch, int location, int entry) {
 		int n =   location / (w*h);
@@ -134,4 +90,35 @@ public:
 		return batch*c*h*w + n*w*h*(4+classes+1) + entry*w*h + loc;
 	}
 
+    private:
+        std::string mPluginNamespace;
+
+    };
+
+    class YoloRTPluginCreator : public IPluginCreator {
+    public:
+        YoloRTPluginCreator();
+
+        void setPluginNamespace(const char *pluginNamespace) NOEXCEPT override;
+
+        const char *getPluginNamespace() const NOEXCEPT override;
+
+        IPluginV2Ext *deserializePlugin(const char *name, const void *serialData, size_t serialLength) NOEXCEPT override;
+
+        IPluginV2Ext *createPlugin(const char *name, const PluginFieldCollection *fc) NOEXCEPT override;
+
+        const char *getPluginName() const NOEXCEPT override;
+
+        const char *getPluginVersion() const NOEXCEPT override;
+
+        const PluginFieldCollection *getFieldNames() NOEXCEPT override;
+
+    private:
+        static PluginFieldCollection mFC;
+        static std::vector<PluginField> mPluginAttributes;
+        std::string mPluginNamespace;
+    };
+
+    REGISTER_TENSORRT_PLUGIN(YoloRTPluginCreator);
 };
+#endif

@@ -30,7 +30,7 @@ namespace tk { namespace dnn {
 
 std::map<Layer*, nvinfer1::ITensor*>tensors; 
 
-static void makeOutputMap(Network *net, std::map<int, std::list<int>>& output_map) {
+void NetworkRT::makeOutputMap(Network *net, std::map<int, std::list<int>>& output_map) {
 	for(int i=0; i<net->num_layers; i++) {
 		Layer *l = net->layers[i];
 		layerType_t type = l->getLayerType();
@@ -97,6 +97,7 @@ static void makeOutputMap(Network *net, std::map<int, std::list<int>>& output_ma
 	}
 }
 
+
 std::set<int> NetworkRT::getInputLayers(Network *net, int start_index, int end_index)
 {
 	std::set<int> inputLayerSet;
@@ -148,6 +149,105 @@ std::set<int> NetworkRT::getInputLayers(Network *net, int start_index, int end_i
 	}
 
 	return inputLayerSet;
+}
+
+
+std::map<std::pair<int, int>, int> NetworkRT::getInputPair(Network *net, int start_index, int end_index)
+{
+	std::map<std::pair<int, int>, int> input_size_map;
+	std::map<int, std::list<int>> output_map;
+	bool duplicated_input_flag = false;
+
+	makeOutputMap(net, output_map);
+
+	for(int i=0; i<=start_index; i++) {
+		Layer *l = net->layers[i];
+
+		if(i < start_index) {
+			std::map<int, std::list<int>>::iterator it;
+			it = output_map.find(l->id);
+			if(it != output_map.end()) {
+				std::list<int>::iterator it2;
+				for(it2 = (it->second).begin(); it2 != (it->second).end(); it2++) {
+					Layer *tl = net->layers[(*it2)];
+
+					if(tl->id >= start_index && tl->id <= end_index ) {
+						if(l->id == start_index - 1) {
+							if(!duplicated_input_flag) {
+								if(start_index > 0 ) {
+									dataDim_t outdim = l->output_dim;
+									int size = outdim.c * outdim.h * outdim.w;
+
+									input_size_map.insert(std::make_pair(std::make_pair(l->id, tl->id), size));
+								}
+								duplicated_input_flag = true;
+							}
+						}
+						else {
+							if(input_size_map.find(std::make_pair(l->id, tl->id)) == input_size_map.end()) {
+								dataDim_t outdim = l->output_dim;
+								int size = outdim.c * outdim.h * outdim.w;
+
+								input_size_map.insert(std::make_pair(std::make_pair(l->id, tl->id), size));
+							}
+						}
+					}
+				}
+			}
+		}
+		else if(i == start_index && i > 0) {
+			Layer *lBefore = net->layers[i-1];
+			if(!(lBefore->getLayerType() == LAYER_ROUTE && ((Route *)lBefore)->layers_n == 1 && ((Route *)lBefore)->groups == 1)) {
+				if(!duplicated_input_flag) {
+					if(start_index > 0) {
+						dataDim_t outdim = lBefore->output_dim;
+						int size = outdim.c * outdim.h * outdim.w;
+
+						input_size_map.insert(std::make_pair(std::make_pair(lBefore->id, start_index), size));
+					}
+				}
+			}
+		}
+	}
+
+	return input_size_map;
+}
+
+
+std::map<std::pair<int, int>, int> NetworkRT::getOutputPair(Network *net, int start_index, int end_index)
+{
+	std::map<std::pair<int, int>, int> output_size_map;
+	std::map<int, std::list<int>> output_map;
+
+	makeOutputMap(net, output_map);
+
+	for(int i=start_index; i<=end_index; i++) {
+		Layer *l = net->layers[i];
+		std::map<int, std::list<int>>::iterator it;
+
+		it = output_map.find(l->id);
+		if(it != output_map.end()) {
+			std::list<int>::iterator it2;
+
+			for(it2 = (it->second).begin(); it2 != (it->second).end(); it2++) {
+				Layer *tl = net->layers[(*it2)];
+				if(tl->id >= end_index + 1 && tl->id <= net->num_layers) {
+					dataDim_t outdim = l->output_dim;
+					int size = outdim.c * outdim.h * outdim.w;
+
+					output_size_map.insert(std::make_pair(std::make_pair(l->id, tl->id), size));	
+				}
+			}
+		}
+
+		if(l->final || l->id == net->num_layers-1) {
+			dataDim_t outdim = l->output_dim;
+			int size = outdim.c * outdim.h * outdim.w;
+			output_size_map.insert(std::make_pair(std::make_pair(l->id, -1), size));	
+		}
+	}
+
+	return output_size_map;
 }
 
 

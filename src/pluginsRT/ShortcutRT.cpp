@@ -67,7 +67,7 @@ int ShortcutRT::enqueue(int batchSize, const void *const *inputs, void *const *o
 		__half *dstData = reinterpret_cast<__half*>(outputs[0]);
 
 		checkCuda( cudaMemcpyAsync(dstData, srcData, batchSize*c*h*w*sizeof(__half), cudaMemcpyDeviceToDevice, stream));
-		shortcutForwardHalf(srcDataBack, dstData, batchSize, c, h, w, 1, batchSize, bc, bh, bw, 1, stream);
+		shortcutForwardHalf(srcDataBack, dstData, batchSize, c, h, w, 1, batchSize, bc, bh, bw, 1, mul, stream);
 	}
 
     return 0;
@@ -91,7 +91,7 @@ int32_t ShortcutRT::enqueue(int32_t batchSize, const void *const *inputs, void *
 		__half *dstData = reinterpret_cast<__half*>(outputs[0]);
 
 		checkCuda( cudaMemcpyAsync(dstData, srcData, batchSize*c*h*w*sizeof(__half), cudaMemcpyDeviceToDevice, stream));
-		shortcutForwardHalf(srcDataBack, dstData, batchSize, c, h, w, 1, batchSize, bc, bh, bw, 1, stream);
+		shortcutForwardHalf(srcDataBack, dstData, batchSize, c, h, w, 1, batchSize, bc, bh, bw, 1, mul, stream);
 	}
     return 0;
 }
@@ -116,7 +116,7 @@ void ShortcutRT::serialize(void *buffer) const NOEXCEPT {
 }
 
 bool ShortcutRT::supportsFormat(DataType type, PluginFormat format) const NOEXCEPT {
-    return ((type == DataType::kFLOAT || type ==DataType::kHALF) && format == PluginFormat::kLINEAR);
+	return ((type == DataType::kFLOAT || type ==DataType::kHALF) && format == PluginFormat::kLINEAR);
 }
 
 const char *ShortcutRT::getPluginType() const NOEXCEPT {
@@ -142,6 +142,7 @@ void ShortcutRT::setPluginNamespace(const char *pluginNamespace) NOEXCEPT {
 IPluginV2Ext *ShortcutRT::clone() const NOEXCEPT {
     auto *p = new ShortcutRT(*this);
     p->setPluginNamespace(mPluginNamespace.c_str());
+	p->mDataType = this->mDataType;
     return p;
 }
 
@@ -149,7 +150,7 @@ void ShortcutRT::configurePlugin(const Dims *inputDims, int32_t nbInputs, const 
                                  const DataType *inputTypes, const DataType *outputTypes, const bool *inputIsBroadcast,
                                  const bool *outputIsBroadcast, PluginFormat floatFormat,
                                  int32_t maxBatchSize) NOEXCEPT {
-
+	mDataType = *inputTypes;
 }
 
 bool ShortcutRT::isOutputBroadcastAcrossBatch(int32_t outputIndex, const bool *inputIsBroadcasted,
@@ -170,7 +171,7 @@ void ShortcutRT::detachFromContext() NOEXCEPT {
 }
 
 DataType ShortcutRT::getOutputDataType(int32_t index, const nvinfer1::DataType *inputTypes, int32_t nbInputs) const NOEXCEPT {
-    return DataType::kFLOAT;
+	return inputTypes[0];
 }
 
 

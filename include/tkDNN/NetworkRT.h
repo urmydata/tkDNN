@@ -60,9 +60,12 @@ public:
     cudaStream_t stream;
 
 	NetworkRT(Network *net, const char *name, int start_index, int end_index, int dla_core);
-    NetworkRT(Network *net, const char *name);
+	NetworkRT(Network *net, const char *name);
+	static void makeOutputMap(Network *net, std::map<int, std::list<int>>& output_map);
 	static std::set<int> getInputLayers(Network *net, int start_index, int end_index);
-    virtual ~NetworkRT();
+	static std::map<std::pair<int, int>, int> getInputPair(Network *net, int start_index, int end_index);
+	static std::map<std::pair<int, int>, int> getOutputPair(Network *net, int start_index, int end_index);
+	virtual ~NetworkRT();
 
     int getMaxBatchSize() {
         if(engineRT != nullptr)

@@ -28,7 +28,7 @@ void shortcutForward(dnnType *srcData, dnnType *dstData, int n1, int c1, int h1,
                      cudaStream_t stream = cudaStream_t(0));
 
 void shortcutForwardHalf(__half* srcData, __half* dstData, int n1, int c1, int h1, int w1, int s1,
-                    int n2, int c2, int h2, int w2, int s2,
+                    int n2, int c2, int h2, int w2, int s2, bool mul,
                      cudaStream_t stream);
 
 

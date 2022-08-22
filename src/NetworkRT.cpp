@@ -299,10 +299,8 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
     dtRT = DataType::kFLOAT;
 
 	builderRT->setMaxBatchSize(net->maxBatchSize);
-    //builderRT->setMaxWorkspaceSize(1 << 30);
 
 	if(net->fp16 && builderRT->platformHasFastFp16()) {
-			dtRT = DataType::kHALF;
 			//builderRT->setHalf2Mode(true);
 #if NV_TENSORRT_MAJOR >= 6                
 			configRT->setFlag(BuilderFlag::kFP16);
@@ -310,7 +308,6 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 	}
 #if NV_TENSORRT_MAJOR >= 5
 	if(net->dla && builderRT->getNbDLACores() > 0) {
-			dtRT = DataType::kHALF;
 			configRT->setFlag(BuilderFlag::kFP16);
 			configRT->setDefaultDeviceType(DeviceType::kDLA);
             configRT->setDLACore(dla_core);
@@ -366,13 +363,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 							if(l->id == start_index - 1) {
 								if(!duplicated_input_flag) {
 									if(start_index > 0) {
-										nvinfer1::DataType inputDataType;
-										if(is_int8 == true) {
-											inputDataType = DataType::kINT8;
-										}
-										else {
-											inputDataType = DataType::kHALF;
-										}
+										nvinfer1::DataType inputDataType = DataType::kHALF;
  										input_middle = networkRT->addInput((l->getLayerName() + std::to_string(i) + "_out").c_str(), inputDataType, Dims3{ outdim.c, outdim.h, outdim.w });
 									}
 									else
@@ -388,13 +379,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 
 								if(tensors.find(l) == tensors.end())
 								{
-									nvinfer1::DataType inputDataType;
-									if(is_int8 == true) {
-										inputDataType = DataType::kINT8;
-									}
-									else {
-										inputDataType = DataType::kHALF;
-									}
+									nvinfer1::DataType inputDataType = DataType::kHALF;
 									input_middle = networkRT->addInput((l->getLayerName() + std::to_string(l->id) + "_out").c_str(), inputDataType, Dims3{ outdim.c, outdim.h, outdim.w });
 									//input_middle = networkRT->addInput((l->getLayerName() + std::to_string(l->id) + "To" + std::to_string(tl->id) + "_out").c_str(), DataType::kHALF, Dims3{ outdim.c, outdim.h, outdim.w });
 									checkNULL(input_middle);
@@ -419,13 +404,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 					{
 						if(!duplicated_input_flag) {
 							if(start_index > 0) {
-								nvinfer1::DataType inputDataType;
-								if(is_int8 == true) {
-									inputDataType = DataType::kINT8;
-								}
-								else {
-									inputDataType = DataType::kHALF;
-								}
+								nvinfer1::DataType inputDataType = DataType::kHALF;
 								input = networkRT->addInput((lBefore->getLayerName() + std::to_string(lBefore->id) + "_out").c_str(), inputDataType, Dims3{ dim.c, dim.h, dim.w });
 							}
 							else
@@ -493,14 +472,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 			if(it != tensors.end()) 
 			{
 				//if(shortcutLayer->backLayer->output_dim.c != shortcutLayer->output_dim.c) FatalError("Different shortcut size for output is not supported.");
-				nvinfer1::DataType inputDataType;
-				if(is_int8 == true) {
-					inputDataType = DataType::kINT8;
-				}
-				else {
-					inputDataType = DataType::kHALF;
-				}
-
+				nvinfer1::DataType inputDataType = DataType::kHALF;
 				it->second->setType(inputDataType);
 				networkRT->markOutput(*(it->second));
 			}
@@ -512,13 +484,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 				Layer *currLayer = routeLayer->layers[iter];
 				std::map<Layer*, nvinfer1::ITensor*>::iterator it = tensors.find(currLayer);
 				if(it != tensors.end())  {
-					nvinfer1::DataType inputDataType;
-					if(is_int8 == true) {
-						inputDataType = DataType::kINT8;
-					}
-					else {
-						inputDataType = DataType::kHALF;
-					}
+					nvinfer1::DataType inputDataType = DataType::kHALF;
 					it->second->setType(inputDataType);
 					networkRT->markOutput(*(it->second));
 				}
@@ -533,14 +499,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 	}
 	if(end_index + 1 < net->num_layers)
 	{
-		nvinfer1::DataType inputDataType;
-		if(is_int8 == true) {
-			inputDataType = DataType::kINT8;
-		}
-		else {
-			inputDataType = DataType::kHALF;
-		}
-
+		nvinfer1::DataType inputDataType = DataType::kHALF;
 		input->setType(inputDataType);
 	}
 
@@ -594,6 +553,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
     }
     std::cout<<"NUMBER OF LAYERS IN ENGINE : "<<engineRT->getNbLayers()<<std::endl;
 }
+
 NetworkRT::NetworkRT(Network *net, const char *name) {
 
     float rt_ver = float(NV_TENSORRT_MAJOR) + 
@@ -1150,57 +1110,6 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Route *l) {
         return lRT;
     }
 
-    if(l->layers_n > 1 && is_dla == true)
-    {
-        for(int i=0; i<l->layers_n; i++) {
-			ITensor *back_tens = tensors[l->layers[i]];
-			Layer *back_layer = l->layers[i];
-			layerType_t back_layer_type = back_layer->getLayerType();
-
-			if(back_layer_type == LAYER_ACTIVATION)
-			{
-				IActivationLayer *lAct = networkRT->addActivation(*back_tens, ActivationType::kRELU);
-				checkNULL(lAct);
-				if(is_int8 == true)
-				{
-					lAct->setPrecision(DataType::kINT8);
-				}
-				run_on_dla(lAct);
-				tens[i] = lAct->getOutput(0);
-				lAct->getOutput(0)->setName((l->getLayerName() + std::to_string(l->id) + "_act"+ std::to_string(i)  + "Out").c_str() );
-			}
-			else if(back_layer_type == LAYER_ROUTE)
-			{
-				IPoolingLayer *lPool = networkRT->addPooling(*back_tens, PoolingType::kMAX, DimsHW{1, 1});
-			    checkNULL(lPool);
-				if(is_int8 == true)
-				{
-					lPool->setPrecision(DataType::kINT8);
-				}
-				lPool->setStride(DimsHW{1, 1});
-				run_on_dla(lPool);
-				tens[i] = lPool->getOutput(0);
-				lPool->getOutput(0)->setName( (l->getLayerName() + std::to_string(l->id) + "_pool"+ std::to_string(i)  + "Out").c_str() );	
-			}
-			else if(back_layer_type == LAYER_POOLING){
-				Pooling *lBackPool = (Pooling *)back_layer;
-				if(lBackPool->strideH > 1 &&  lBackPool->strideW > 1)
-				{
-					IPoolingLayer *lPool = networkRT->addPooling(*back_tens, PoolingType::kMAX, DimsHW{1, 1});
-				    checkNULL(lPool);
-					if(is_int8 == true)
-					{
-						lPool->setPrecision(DataType::kINT8);
-					}
-					lPool->setStride(DimsHW{1, 1});
-					run_on_dla(lPool);
-					tens[i] = lPool->getOutput(0);
-					lPool->getOutput(0)->setName( (l->getLayerName() + std::to_string(l->id) + "_pool"+ std::to_string(i)  + "Out").c_str() );	
-				}
-			}
-        }  
-    }
-
     IConcatenationLayer *lRT = networkRT->addConcatenation(tens, l->layers_n);
     checkNULL(lRT);
     return lRT;
@@ -1301,20 +1210,6 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Shortcut *l) {
 
     if(l->backLayer->output_dim.c == l->output_dim.c && !l->mul) 
     {
-		if(is_dla == true && l->backLayer->id >= startIndex)
-		{
-			IPoolingLayer *lPool = networkRT->addPooling(*back_tens, PoolingType::kMAX, DimsHW{1, 1});
-			if(is_int8 == true)
-			{
-				lPool->setPrecision(DataType::kINT8);
-			}
-    	    lPool->setStride(DimsHW{1, 1});
-	        run_on_dla(lPool);
-    	    back_tens = lPool->getOutput(0);
-			lPool->getOutput(0)->setName( (l->getLayerName() + std::to_string(l->id) + "_poolOut").c_str() );	
-
-		}
-
         IElementWiseLayer *lRT = networkRT->addElementWise(*back_tens, *input, ElementWiseOperation::kSUM);
         checkNULL(lRT);
         return lRT;
@@ -1367,8 +1262,10 @@ IPluginV2Layer* NetworkRT::convert_layer(ITensor *input, Yolo *l) {
     return lRT;
 }
 
-IPluginV2Layer* NetworkRT::convert_layer(ITensor *input, Upsample *l) {
+// IPluginV2Layer* NetworkRT::convert_layer(ITensor *input, Upsample *l) {
+ILayer* NetworkRT::convert_layer(ITensor *input, Upsample *l) {
     //std::cout<<"convert Upsample\n";
+/*
 	auto creator = getPluginRegistry()->getPluginCreator("UpSample_tkDNN","1");
     std::vector<PluginField> mPluginAttributes;
     PluginFieldCollection mFC{};
@@ -1381,6 +1278,20 @@ IPluginV2Layer* NetworkRT::convert_layer(ITensor *input, Upsample *l) {
     auto *plugin = creator->createPlugin(l->getLayerName().c_str(),&mFC);
     auto *lRT = networkRT->addPluginV2(&input, 1, *plugin);
     checkNULL(lRT);
+    return lRT;
+*/
+
+    float *deval = reinterpret_cast<float*>(malloc(sizeof(float) * l->output_dim.c * l->stride * l->stride));
+    for (int i = 0; i < l->output_dim.c * l->stride * l->stride; i++) {
+        deval[i] = 1.0;
+    }
+    Weights emptywts{DataType::kFLOAT, nullptr, 0};
+    Weights upsamplewts{DataType::kFLOAT, deval, l->output_dim.c * l->stride * l->stride};
+
+    IDeconvolutionLayer *lRT = networkRT->addDeconvolution(*input, l->output_dim.c, DimsHW{l->stride, l->stride}, upsamplewts, emptywts);
+    checkNULL(lRT);
+    lRT->setStrideNd(DimsHW{l->stride, l->stride});
+    lRT->setNbGroups(l->output_dim.c);
     return lRT;
 }
 

@@ -101,7 +101,7 @@ public:
     nvinfer1::IPluginV2Layer* convert_layer(nvinfer1::ITensor *input, Region *l);
     nvinfer1::ILayer* convert_layer(nvinfer1::ITensor *input, Shortcut *l);
     nvinfer1::IPluginV2Layer* convert_layer(nvinfer1::ITensor *input, Yolo *l);
-    nvinfer1::IPluginV2Layer* convert_layer(nvinfer1::ITensor *input, Upsample *l);
+    nvinfer1::ILayer* convert_layer(nvinfer1::ITensor *input, Upsample *l);
     nvinfer1::ILayer* convert_layer(nvinfer1::ITensor *input, DeformConv2d *l);
 
 #if NV_TENSORRT_MAJOR > 5 && NV_TENSORRT_MAJOR < 8

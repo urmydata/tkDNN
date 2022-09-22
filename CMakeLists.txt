@@ -5,6 +5,10 @@ set(CMAKE_CXX_STANDARD 14)
 
 option(ENABLE_OPENCV_CUDA_CONTRIB "Enable OpenCV CUDA Contrib" OFF )
 
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE "Release" CACHE STRING "default build" FORCE)
+endif(NOT CMAKE_BUILD_TYPE)
+
 find_package(CUDA 9.0 REQUIRED)
 if (CUDA_FOUND)
     set(OUTPUTFILE ${CMAKE_CURRENT_SOURCE_DIR}/cmake/cuda_script) # No suffix required
@@ -33,16 +37,16 @@ if (CUDA_FOUND)
     endif()
 endif()
 
-#SET(CUDA_SEPARABLE_COMPILATION ON)
+SET(CUDA_SEPARABLE_COMPILATION ON)
 
 if(UNIX)
     if(CMAKE_BUILD_TYPE MATCHES Release)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -fPIC -Wno-deprecated-declarations -Wno-unused-variable -O3")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -fPIC -Wno-deprecated-declarations -Wno-unused-variable -O3")
         set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --maxrregcount=32)
     endif()
 
     if(CMAKE_BUILD_TYPE MATCHES Debug)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -fPIC -Wno-deprecated-declarations -Wno-unused-variable -g3")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -fPIC -Wno-deprecated-declarations -Wno-unused-variable -g3")
         set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --maxrregcount=32 -G -g)
     endif()
 endif()
@@ -57,7 +61,6 @@ if(WIN32)
         set(CMAKE_CXX_FLAGS "/Od /FS /EHsc /MDd")
         set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --maxrregcount=32 -G -g)
     endif()
-
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 endif(WIN32)
 
@@ -69,7 +72,7 @@ if(DEBUG)
 endif()
 
 if(TKDNN_PATH)
-    #message("SET TKDNN_PATH:"${TKDNN_PATH})
+    message("SET TKDNN_PATH:" ${TKDNN_PATH})
     add_definitions(-DTKDNN_PATH="${TKDNN_PATH}")
 else()
     add_definitions(-DTKDNN_PATH="${CMAKE_CURRENT_SOURCE_DIR}")
@@ -79,21 +82,20 @@ endif()
 #-------------------------------------------------------------------------------
 # CUDA
 #-------------------------------------------------------------------------------
-find_package(CUDA 9.0 REQUIRED)
-#SET(CUDA_SEPARABLE_COMPILATION ON)
-#set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -arch=sm_72 --maxrregcount=32 '-fPIC'")
-#set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -arch=sm_72 --maxrregcount=32)
-#set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --ptxas-options=-v --maxrregcount=32)
+set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS}" --compiler-options '-fPIC')
+
 
 find_package(CUDNN REQUIRED)
 include_directories(${CUDNN_INCLUDE_DIR})
+
+find_package(yaml-cpp REQUIRED)
 
 
 # compile
 file(GLOB tkdnn_CUSRC "src/kernels/*.cu" "src/sorting.cu" "src/pluginsRT/*.cpp")
 cuda_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include ${CUDA_INCLUDE_DIRS} ${CUDNN_INCLUDE_DIRS})
 cuda_add_library(kernels SHARED ${tkdnn_CUSRC})
-target_link_libraries(kernels ${CUDA_CUBLAS_LIBRARIES} ${CUDA_LIBRARIES} ${CUDNN_LIBRARIES})
+target_link_libraries(kernels ${CUDA_CUBLAS_LIBRARIES} ${CUDA_LIBRARIES} ${CUDNN_LIBRARIES} yaml-cpp)
 
 
 
@@ -123,7 +125,6 @@ endif()
 # endif()
 
 # gives problems in cross-compiling, probably malformed cmake config
-find_package(yaml-cpp REQUIRED)
 
 #-------------------------------------------------------------------------------
 # Build Libraries
@@ -208,6 +209,14 @@ target_link_libraries(test_shelfnet_mapillary tkDNN)
 add_executable(test_shelfnet_coco tests/shelfnet/shelfnet_coco.cpp)
 target_link_libraries(test_shelfnet_coco tkDNN)
 
+# MONODEPTH2
+add_executable(test_monodepth2_640 tests/monodepth2/monodepth2_640.cpp)
+target_link_libraries(test_monodepth2_640 tkDNN)
+
+add_executable(test_monodepth2_1024 tests/monodepth2/monodepth2_1024.cpp)
+target_link_libraries(test_monodepth2_1024 tkDNN)
+
+
 # DEMOS
 add_executable(test_rtinference tests/test_rtinference/rtinference.cpp)
 target_link_libraries(test_rtinference tkDNN)
@@ -227,6 +236,9 @@ target_link_libraries(demoTracker tkDNN)
 add_executable(seg_demo demo/demo/seg_demo.cpp)
 target_link_libraries(seg_demo tkDNN)
 
+add_executable(demoDepth demo/demo/demoDepth.cpp)
+target_link_libraries(demoDepth tkDNN)
+
 #-------------------------------------------------------------------------------
 # Install
 #-------------------------------------------------------------------------------
@@ -236,7 +248,7 @@ target_link_libraries(seg_demo tkDNN)
 #endif()
 message("install dir:" ${CMAKE_INSTALL_PREFIX})
 install(DIRECTORY include/ DESTINATION include/)
-install(TARGETS tkDNN kernels  DESTINATION lib)
+install(TARGETS tkDNN  DESTINATION lib)
 install(TARGETS test_simple test_mnist test_mnistRT test_rtinference demo map_demo DESTINATION bin)
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/cmake/" # source directory
         DESTINATION "share/tkDNN/cmake/" # target directory

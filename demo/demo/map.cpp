@@ -121,7 +121,8 @@ int main(int argc, char *argv[])
         default:
             FatalError("Network type not allowed (3rd parameter)\n");
     }
-    detNN->init(net,cfg_path,name_path,n_classes, 1, conf_thresh);
+
+    detNN->init(net,n_classes, 1, conf_thresh);
 
     //read images 
     std::ifstream all_labels(labels_path);

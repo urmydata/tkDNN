@@ -43,7 +43,6 @@ public:
         bool supportsFormatCombination(int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) const NOEXCEPT override;
         
         DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const NOEXCEPT override;
-
         const char *getPluginType() const NOEXCEPT override ;
 
         const char *getPluginVersion() const NOEXCEPT override ;
@@ -92,6 +91,7 @@ private:
         static PluginFieldCollection mFC;
         static std::vector<PluginField> mPluginAttributes;
         std::string mPluginNamespace;
+
 	};
 	REGISTER_TENSORRT_PLUGIN(RouteRTPluginCreator);
 };

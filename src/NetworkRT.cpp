@@ -17,6 +17,9 @@
 
 using namespace nvinfer1;
 
+extern std::mutex gYoloPlugins_mutex;
+extern std::vector<YoloRT*> gYoloPlugins;
+
 // Logger for info/warning/errors
 class Logger : public ILogger {
     void log(Severity severity, const char* msg) NOEXCEPT override {
@@ -598,14 +601,10 @@ NetworkRT::NetworkRT(Network *net, const char *name) {
 #if NV_TENSORRT_MAJOR >= 5
         if(net->dla && builderRT->getNbDLACores() > 0) {
             dtRT = DataType::kHALF;
-            //builderRT->setfp16mode(true);
-            //builderRT->allowGPUFallback(true);
-            //builderRT->setDefaultDeviceType(DeviceType::kDLA);
-            //builderRT->setDLACore(0);
             configRT->setFlag(BuilderFlag::kFP16);
+            configRT->setFlag(BuilderFlag::kGPU_FALLBACK);
             configRT->setDefaultDeviceType(DeviceType::kDLA);
             configRT->setDLACore(0);
-			configRT->setFlag(BuilderFlag::kGPU_FALLBACK);
         }
 #endif
 #if NV_TENSORRT_MAJOR >= 6                
@@ -827,6 +826,10 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Layer *l) {
         return convert_layer(input, (Upsample*) l);
     if(type == LAYER_DEFORMCONV2D)
         return convert_layer(input, (DeformConv2d*) l);
+    if(type == LAYER_PADDING)
+        return convert_layer(input, (Padding*) l);
+    if(type == LAYER_MULADD)
+        return convert_layer(input,(MulAdd*) l);
 
     std::cout<<l->getLayerName()<<"\n";
     FatalError("Layer not implemented in tensorRT");
@@ -973,6 +976,80 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Conv2d *l) {
     return lRT;
 }
 
+ILayer* NetworkRT::convert_layer(ITensor *input,MulAdd *l){
+
+    void *power_b, *shift_b, *scales_b;
+    int size = l->input_dim.tot();    
+
+    power_b = new dnnType[size];
+    shift_b = new dnnType[size];
+    scales_b = new dnnType[size];
+
+    for(int i=0; i<size; i++) {
+        ((dnnType*) power_b)[i] = 1.0;
+        ((dnnType*) shift_b)[i] = l->add;
+        ((dnnType*) scales_b)[i] = l->mul;
+    }
+
+    if(dtRT == DataType::kHALF) {
+
+        __half *power16_h    = nullptr,    *power16_d = nullptr;
+        __half *scales16_h   = nullptr,   *scales16_d = nullptr;
+        __half *shift16_h     = nullptr,     *shift16_d = nullptr;
+
+        dnnType * power_d = nullptr;
+        dnnType * scales_d = nullptr;
+        dnnType * shift_d = nullptr;
+
+        cudaMalloc(&power_d, size*sizeof(dnnType));
+        cudaMemcpy(power_d, power_b, size*sizeof(dnnType), cudaMemcpyHostToDevice);
+
+        cudaMalloc(&shift_d, size*sizeof(dnnType));
+        cudaMemcpy(shift_d, shift_b, size*sizeof(dnnType), cudaMemcpyHostToDevice);
+
+        cudaMalloc(&scales_d, size*sizeof(dnnType));
+        cudaMemcpy(scales_d, scales_b, size*sizeof(dnnType), cudaMemcpyHostToDevice);
+
+        //convert to fp16
+        power16_h = new __half[size];
+        cudaMalloc(&power16_d, size*sizeof(__half));
+        float2half(power_d, power16_d, size);
+        cudaMemcpy(power16_h, power16_d, size*sizeof(__half), cudaMemcpyDeviceToHost);
+
+        shift16_h = new __half[size];
+        cudaMalloc(&shift16_d, size*sizeof(__half));
+        float2half(shift_d, shift16_d, size);
+        cudaMemcpy(shift16_h, shift16_d, size*sizeof(__half), cudaMemcpyDeviceToHost);
+
+        scales16_h = new __half[size];
+        cudaMalloc(&scales16_d, size*sizeof(__half));
+        float2half(scales_d, scales16_d, size);
+        cudaMemcpy(scales16_h, scales16_d, size*sizeof(__half), cudaMemcpyDeviceToHost);
+
+        power_b = power16_h;
+        shift_b = shift16_h;
+        scales_b = scales16_h;
+
+
+        cudaFree(power16_d);
+        cudaFree(shift16_d);
+        cudaFree(scales16_d);
+
+        cudaFree(power_d);
+        cudaFree(shift_d);
+        cudaFree(scales_d);
+    } 
+
+    Weights power{dtRT, power_b,  size};
+    Weights shift{dtRT, shift_b,  size};
+    Weights scale{dtRT, scales_b, size};
+    IScaleLayer *lRT = networkRT->addScale(*input, ScaleMode::kELEMENTWISE,
+                    shift, scale, power);
+    checkNULL(lRT);
+    return lRT;
+}
+
+
 ILayer* NetworkRT::convert_layer(ITensor *input, Pooling *l) {
     // std::cout<<"convert Pooling\n";
 
@@ -1016,10 +1093,70 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Pooling *l) {
         checkNULL(lRT);
         lRT->setPaddingNd(Dims2{l->paddingH,l->paddingW});
         lRT->setStrideNd(Dims2{l->strideH,l->strideW});
-
         return lRT;
 #endif
+    }
+}
+
+ILayer* NetworkRT::convert_layer(ITensor *input,Padding *l){
+
+    float rt_ver =  float(NV_TENSORRT_MAJOR) +
+                    float(NV_TENSORRT_MINOR)/10 +
+                    float(NV_TENSORRT_PATCH)/100;
+
+/*#if ((NV_TENSORRT_MAJOR == 8 && NV_TENSORRT_MINOR >= 2) || NV_TENSORRT_MAJOR > 8)
+    auto *lRT = networkRT->addSlice(*input,Dims3{0,0,0},Dims3{l->output_dim.c,l->output_dim.h,l->output_dim.w},Dims3{0,0,0});
+    if(l->padding_mode == PADDING_MODE_REFLECTION){
+        lRT->setMode(SliceMode::kREFLECT);
+    }else if(l->padding_mode == PADDING_MODE_CONSTANT || l->padding_mode == PADDING_MODE_ZERO){
+        lRT->setMode(SliceMode::kFILL);
+        lRT->setInput(4, reinterpret_cast<ITensor &>(l->constant));
+    }
+    checkNULL(lRT);
+    return lRT;
+#else*/
+    //todo use ISliceLayer for padding,currently using ISliceLayer for reflection padding generates an error with monodepth2
+    if(l->padding_mode == PADDING_MODE_REFLECTION){
+        auto creator = getPluginRegistry()->getPluginCreator("ReflectionPaddingRT_tkDNN","1");
+        std::vector<PluginField> mPluginAttributes;
+        PluginFieldCollection mFC{};
+        mPluginAttributes.emplace_back(PluginField("padH",&l->paddingH,PluginFieldType::kINT32,1));
+        mPluginAttributes.emplace_back(PluginField("padW",&l->paddingW,PluginFieldType::kINT32,1));
+        mPluginAttributes.emplace_back(PluginField("inputH",&l->input_dim.h,PluginFieldType::kINT32,1));
+        mPluginAttributes.emplace_back(PluginField("inputW",&l->input_dim.w,PluginFieldType::kINT32,1));
+        mPluginAttributes.emplace_back(PluginField("outputH",&l->output_dim.h,PluginFieldType::kINT32,1));
+        mPluginAttributes.emplace_back(PluginField("outputW",&l->output_dim.w,PluginFieldType::kINT32,1));
+        mPluginAttributes.emplace_back(PluginField("n",&l->input_dim.n,PluginFieldType::kINT32,1));
+        mPluginAttributes.emplace_back(PluginField("c",&l->input_dim.c,PluginFieldType::kINT32,1));
+        mFC.nbFields = mPluginAttributes.size();
+        mFC.fields = mPluginAttributes.data();
+        auto *plugin = creator->createPlugin(l->getLayerName().c_str(),&mFC);
+        auto *lRT = networkRT->addPluginV2(&input, 1, *plugin);
+        checkNULL(lRT);
+        return lRT;
+    }else if(l->padding_mode == PADDING_MODE_CONSTANT || l->padding_mode == PADDING_MODE_ZERO){
+        auto creator = getPluginRegistry()->getPluginCreator("ConstantPaddingRT_tkDNN","1");
+        std::vector<PluginField> mPluginAttributes;
+        PluginFieldCollection mFC{};
+        mPluginAttributes.emplace_back(PluginField("padH",&l->paddingH,PluginFieldType::kINT32,1));
+        mPluginAttributes.emplace_back(PluginField("padW",&l->paddingW,PluginFieldType::kINT32,1));
+        mPluginAttributes.emplace_back(PluginField("inputH",&l->input_dim.h,PluginFieldType::kINT32,1));
+        mPluginAttributes.emplace_back(PluginField("inputW",&l->input_dim.w,PluginFieldType::kINT32,1));
+        mPluginAttributes.emplace_back(PluginField("outputH",&l->output_dim.h,PluginFieldType::kINT32,1));
+        mPluginAttributes.emplace_back(PluginField("outputW",&l->output_dim.w,PluginFieldType::kINT32,1));
+        mPluginAttributes.emplace_back(PluginField("n",&l->input_dim.n,PluginFieldType::kINT32,1));
+        mPluginAttributes.emplace_back(PluginField("c",&l->input_dim.c,PluginFieldType::kINT32,1));
+        mPluginAttributes.emplace_back(PluginField("constant",&l->constant,PluginFieldType::kFLOAT32,1));
+        mFC.nbFields = mPluginAttributes.size();
+        mFC.fields = mPluginAttributes.data();
+        auto *plugin = creator->createPlugin(l->getLayerName().c_str(),&mFC);
+        auto *lRT = networkRT->addPluginV2(&input,1,*plugin);
+        checkNULL(lRT);
+        return lRT;
     }  
+
+    return nullptr;
+
 }
 
 ILayer* NetworkRT::convert_layer(ITensor *input, Activation *l) {
@@ -1070,6 +1207,11 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Activation *l) {
     }
     else if(l->act_mode == ACTIVATION_LOGISTIC) {
         IActivationLayer *lRT = networkRT->addActivation(*input,ActivationType::kSIGMOID);
+        checkNULL(lRT);
+        return lRT;
+    }
+    else if(l->act_mode == CUDNN_ACTIVATION_ELU || l->act_mode == ACTIVATION_ELU){
+        IActivationLayer *lRT = networkRT->addActivation(*input,ActivationType::kELU);
         checkNULL(lRT);
         return lRT;
     }
@@ -1254,6 +1396,13 @@ IPluginV2Layer* NetworkRT::convert_layer(ITensor *input, Yolo *l) {
     mPluginAttributes.emplace_back(PluginField("nms_thresh",&l->nms_thresh,PluginFieldType::kFLOAT32,1));
     mPluginAttributes.emplace_back(PluginField("nms_kins",&l->nsm_kind,PluginFieldType::kINT32,1));
     mPluginAttributes.emplace_back(PluginField("new_coords",&l->new_coords,PluginFieldType::kINT32,1));
+
+mPluginAttributes.emplace_back(PluginField("mask",l->mask_h,PluginFieldType::kFLOAT32,l->n_masks));
+    mPluginAttributes.emplace_back(PluginField("bias",l->bias_h,PluginFieldType::kFLOAT32,l->n_masks*2*l->num));
+    for(int i=0; i<l->classes; i++) {
+        mPluginAttributes.emplace_back(PluginField("class_name",l->classesNames[i].data(),PluginFieldType::kCHAR,l->classesNames[i].size()));
+    }
+    
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
     auto *plugin = creator->createPlugin(l->getLayerName().c_str(),&mFC);

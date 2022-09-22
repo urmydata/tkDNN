@@ -22,6 +22,10 @@ YoloRT::YoloRT(int classes, int num, int c,int h,int w,int n_masks, float scale_
     this->nms_thresh = nms_thresh;
     this->nms_kind = nms_kind;
     this->new_coords = new_coords;
+    
+    bias.clear();
+    mask.clear();
+    classesNames.clear();
 }
 
 YoloRT::YoloRT(const void *data, size_t length) {
@@ -36,7 +40,24 @@ YoloRT::YoloRT(const void *data, size_t length) {
     c = readBUF<int>(buf);
     h = readBUF<int>(buf);
     w = readBUF<int>(buf);
+
+    mask.resize(n_masks);
+    for(int i=0; i<n_masks; i++)
+        mask[i] = readBUF<dnnType>(buf);
+    bias.resize(n_masks*2*num);
+    for(int i=0; i<n_masks*2*num; i++)
+        bias[i] = readBUF<dnnType>(buf);
+
+    // save classes names
+    classesNames.resize(classes);
+    for(int i=0; i<classes; i++) {
+        char tmp[YOLORT_CLASSNAME_W];
+        for(int j=0; j<YOLORT_CLASSNAME_W; j++)
+            tmp[j] = readBUF<char>(buf);
+        classesNames[i] = std::string(tmp);
+    }
     assert(buf == bufCheck + length);
+    gYoloPlugins.push_back(this);
 }
 
 YoloRT::~YoloRT() {}
@@ -125,6 +146,20 @@ void YoloRT::serialize(void *buffer) const NOEXCEPT {
     writeBUF(buf, h);            //std::cout << "H : " << h << std::endl;
     writeBUF(buf, w);            //std::cout << "C : " << c << std::endl;
 
+    for (int i = 0; i < n_masks; i++)
+        writeBUF(buf, mask[i]); //std::cout << "mask[i] : " << mask[i] << std::endl;
+    for (int i = 0; i < n_masks * 2 * num; i++)
+        writeBUF(buf, bias[i]); //std::cout << "bias[i] : " << bias[i] << std::endl;
+
+    // save classes names
+    for(int i=0; i<classes; i++) {
+        char tmp[YOLORT_CLASSNAME_W];
+        strcpy(tmp, classesNames[i].c_str());
+        for(int j=0; j<YOLORT_CLASSNAME_W; j++) {
+            writeBUF(buf, tmp[j]);
+        }
+    }
+
     assert(buf == a + getSerializationSize());
 }
 
@@ -150,6 +185,10 @@ void YoloRT::setPluginNamespace(const char *pluginNamespace) NOEXCEPT {
 
 IPluginV2Ext *YoloRT::clone() const NOEXCEPT {
     auto *p = new YoloRT(classes, num,c,h,w,n_masks, scaleXY, nms_thresh, nms_kind, new_coords);
+
+    p->mask = mask;
+    p->bias = bias;
+    p->classesNames = classesNames;
     p->setPluginNamespace(mPluginNamespace.c_str());
     return p;
 }
@@ -214,6 +253,17 @@ IPluginV2Ext *YoloRTPluginCreator::createPlugin(const char *name, const PluginFi
     int nms_kind = *(static_cast<const int*>(fields[8].data));
     int new_coords = *(static_cast<const int*>(fields[9].data));
     auto *pluginObj = new YoloRT(classes,num,c,h,w,n_masks,scaleXY,nmsThresh,nms_kind,new_coords);
+
+    // fill additional data
+    pluginObj->mask.resize(fields[10].length*sizeof(float));
+    memcpy(pluginObj->mask.data(), fields[10].data, fields[10].length*sizeof(float));
+    pluginObj->bias.resize(fields[11].length*sizeof(float));
+    memcpy(pluginObj->bias.data(), fields[11].data, fields[11].length*sizeof(float));
+    pluginObj->classesNames.resize(classes);
+    for(int i=0; i<classes; i++) {
+        pluginObj->classesNames[i].resize(fields[12+i].length);
+        memcpy(&pluginObj->classesNames[i][0], fields[12+i].data, fields[12+i].length*sizeof(char));
+    }
     return pluginObj;
 }
 

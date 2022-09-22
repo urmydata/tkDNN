@@ -289,7 +289,6 @@ const char *RouteRTPluginCreator::getPluginName() const NOEXCEPT {
 const char *RouteRTPluginCreator::getPluginVersion() const NOEXCEPT {
     return "2";
 }
-
 const PluginFieldCollection *RouteRTPluginCreator::getFieldNames() NOEXCEPT {
     return &mFC;
 }

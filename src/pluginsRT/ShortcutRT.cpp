@@ -69,7 +69,6 @@ int ShortcutRT::enqueue(int batchSize, const void *const *inputs, void *const *o
 		checkCuda( cudaMemcpyAsync(dstData, srcData, batchSize*c*h*w*sizeof(__half), cudaMemcpyDeviceToDevice, stream));
 		shortcutForwardHalf(srcDataBack, dstData, batchSize, c, h, w, 1, batchSize, bc, bh, bw, 1, mul, stream);
 	}
-
     return 0;
 }
 #elif NV_TENSORRT_MAJOR <= 7

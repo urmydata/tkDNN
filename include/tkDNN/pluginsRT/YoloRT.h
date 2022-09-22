@@ -82,6 +82,8 @@ namespace nvinfer1 {
 	int new_coords;
         int NUM = 0;
 	std::vector<std::string> classesNames;
+        std::vector<dnnType> mask;
+        std::vector<dnnType> bias;
 
 
 	int entry_index(int batch, int location, int entry) {

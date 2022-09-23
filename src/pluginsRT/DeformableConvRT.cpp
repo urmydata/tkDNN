@@ -153,7 +153,6 @@ int DeformableConvRT::enqueue(int batchSize, const void *const *inputs, void *co
                          o_n, o_c, o_h, o_w,
                          chunk_dim);
     }
->>>>>>> d4f7b4ad8b21f1af78e1bada3e0368c0c1304ad9
     return 0;
 }
 #elif NV_TENSORRT_MAJOR <= 7

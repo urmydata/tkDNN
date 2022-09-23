@@ -95,7 +95,7 @@ int main(int argc, char *argv[]) {
         namePath = "";
     }
 
-    detNN->init(net,cfgPath,namePath,n_classes,n_batch,conf_thresh);
+    detNN->init(net,n_classes,n_batch,conf_thresh);
 
     gRun = true;
 

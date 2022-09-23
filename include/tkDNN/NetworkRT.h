@@ -61,6 +61,8 @@ public:
     dnnType *output;
     cudaStream_t stream;
 
+    std::vector<nvinfer1::YoloRT*> yolo_plugins; // yolo layers in network
+
 	NetworkRT(Network *net, const char *name, int start_index, int end_index, int dla_core);
 	NetworkRT(Network *net, const char *name);
 	static void makeOutputMap(Network *net, std::map<int, std::list<int>>& output_map);

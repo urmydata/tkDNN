@@ -1,7 +1,11 @@
 #include <tkDNN/pluginsRT/YoloRT.h>
 
 #include <utility>
+#include <mutex>
 using namespace nvinfer1;
+
+std::mutex gYoloPlugins_mutex;
+std::vector<YoloRT*> gYoloPlugins;
 
 std::vector<PluginField> YoloRTPluginCreator::mPluginAttributes;
 PluginFieldCollection YoloRTPluginCreator::mFC{};
@@ -126,7 +130,8 @@ int32_t YoloRT::enqueue(int32_t batchSize, const void *const *inputs, void **out
 
 
 size_t YoloRT::getSerializationSize() const NOEXCEPT {
-    return 8 * sizeof(int) + 2 * sizeof(float) ;
+    // return 8 * sizeof(int) + 2 * sizeof(float) ;
+    return 8 * sizeof(int) + 2 * sizeof(float) + n_masks*sizeof(dnnType) + num*n_masks*2*sizeof(dnnType) + YOLORT_CLASSNAME_W*classes*sizeof(char);
 }
 
 bool YoloRT::supportsFormat(DataType type, PluginFormat format) const NOEXCEPT {

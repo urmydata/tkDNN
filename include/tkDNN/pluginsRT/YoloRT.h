@@ -5,7 +5,6 @@
 #include <vector>
 #include "../kernels.h"
 #include <NvInfer.h>
-#include <tkdnn.h>
 
 #define YOLORT_CLASSNAME_W 256
 

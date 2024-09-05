@@ -3,6 +3,7 @@
 
 #include <string.h> // memcpy
 #include <set>
+#include <tuple>
 #include "utils.h"
 #include "Network.h"
 #include "Layer.h"
@@ -60,7 +61,7 @@ public:
     dataDim_t input_dim, output_dim;
     dnnType *output;
     cudaStream_t stream;
-
+	int maxBatchSize;
     std::vector<nvinfer1::YoloRT*> yolo_plugins; // yolo layers in network
 
 	NetworkRT(Network *net, const char *name, int start_index, int end_index, int dla_core);
@@ -69,18 +70,20 @@ public:
 	static std::set<int> getInputLayers(Network *net, int start_index, int end_index);
 	static std::map<std::pair<int, int>, int> getInputPair(Network *net, int start_index, int end_index);
 	static std::map<std::pair<int, int>, int> getOutputPair(Network *net, int start_index, int end_index);
+	// static std::map<std::pair<int, int>, std::tuple<int, int, int>> getInputPair(Network *net, int start_index, int end_index);
+	// static std::map<std::pair<int, int>, std::tuple<int, int, int>> getOutputPair(Network *net, int start_index, int end_index);
 	virtual ~NetworkRT();
 
     int getMaxBatchSize() {
         if(engineRT != nullptr)
-            return engineRT->getMaxBatchSize();
+            return maxBatchSize;
         else
             return 0;
     }
 
     int getBuffersN() {
         if(engineRT != nullptr)
-            return engineRT->getNbBindings();
+            return engineRT->getNbIOTensors();
         else 
             return 0;
     }

@@ -23,6 +23,28 @@ class Logger : public ILogger
 	}
 } gLogger;
 
+static ILayer* addFullyConnected(INetworkDefinition* network, ITensor *input, Dense *l, Weights w, Weights b) {
+	IConstantLayer *weightLayer = network->addConstant(Dims2{l->inputs, l->outputs}, w);
+	//IConstantLayer *weightLayer = networkRT->addConstant(Dims2{l->outputs, l->inputs}, w);
+    checkNULL(weightLayer);
+	ITensor *weightTensor = weightLayer->getOutput(0);
+
+	IMatrixMultiplyLayer *lmmRT = network->addMatrixMultiply(*input, MatrixOperation::kNONE, *weightTensor, MatrixOperation::kTRANSPOSE);
+	//IMatrixMultiplyLayer *lmmRT = network->addMatrixMultipy(*input, MatrixOperation::kNONE, *weightTensor, MatrixOperation::kNONE);
+    checkNULL(lmmRT);
+	ITensor *mmTensor = lmmRT->getOutput(0);
+
+	IConstantLayer *lbiasRT = network->addConstant(Dims2{1, l->outputs}, b);
+    checkNULL(lbiasRT);
+	ITensor *biasTensor = lbiasRT->getOutput(0);
+
+	IElementWiseLayer *lRT = network->addElementWise(*mmTensor, *biasTensor, ElementWiseOperation::kSUM);
+    checkNULL(lRT);
+
+	return lRT;
+}	
+
+
 int main() {
 
 	downloadWeightsifDoNotExist(input_bin, "mnist", "https://cloud.hipert.unimore.it/s/2TyQkMJL3LArLAS/download");
@@ -77,33 +99,34 @@ int main() {
     Weights w { dt, c0->data_h, c0->inputs*c0->outputs*c0->kernelH*c0->kernelW};
     Weights b { dt, c0->bias_h, c0->outputs};
 	// Add a convolution layer with 20 outputs and a 5x5 filter.
-	auto conv1 = network->addConvolution(*input, 20, DimsHW{5, 5}, w, b);
+	auto conv1 = network->addConvolutionNd(*input, 20, DimsHW{5, 5}, w, b);
 	assert(conv1 != nullptr);
-	conv1->setStride(DimsHW{1, 1});
+	conv1->setStrideNd(DimsHW{1, 1});
 
 	// Add a max pooling layer with stride of 2x2 and kernel size of 2x2.
-	auto pool1 = network->addPooling(*conv1->getOutput(0), PoolingType::kMAX, DimsHW{2, 2});
+	auto pool1 = network->addPoolingNd(*conv1->getOutput(0), PoolingType::kMAX, DimsHW{2, 2});
 	assert(pool1 != nullptr);
-	pool1->setStride(DimsHW{2, 2});
+	pool1->setStrideNd(DimsHW{2, 2});
 
     tk::dnn::Conv2d *c1 = &l2; 
     Weights w1 { dt, c1->data_h, c1->inputs*c1->outputs*c1->kernelH*c1->kernelW};
     Weights b1 { dt, c1->bias_h, c1->outputs};
 	// Add a second convolution layer with 50 outputs and a 5x5 filter.
-	auto conv2 = network->addConvolution(*pool1->getOutput(0), 50, DimsHW{5, 5}, w1, b1);
+	auto conv2 = network->addConvolutionNd(*pool1->getOutput(0), 50, DimsHW{5, 5}, w1, b1);
 	assert(conv2 != nullptr);
-	conv2->setStride(DimsHW{1, 1});
+	conv2->setStrideNd(DimsHW{1, 1});
 
 	// Add a second max pooling layer with stride of 2x2 and kernel size of 2x3>
-	auto pool2 = network->addPooling(*conv2->getOutput(0), PoolingType::kMAX, DimsHW{2, 2});
+	auto pool2 = network->addPoolingNd(*conv2->getOutput(0), PoolingType::kMAX, DimsHW{2, 2});
 	assert(pool2 != nullptr);
-	pool2->setStride(DimsHW{2, 2});
+	pool2->setStrideNd(DimsHW{2, 2});
 
     tk::dnn::Dense *d2 = &l4; 
     Weights w2 { dt, d2->data_h, d2->inputs*d2->outputs};
     Weights b2 { dt, d2->bias_h, d2->outputs};
 	// Add a fully connected layer with 500 outputs.
-	auto ip1 = network->addFullyConnected(*pool2->getOutput(0), 500, w2, b2);
+	auto ip1 = addFullyConnected(network, pool2->getOutput(0), d2, w2, b2);
+	//auto ip1 = network->addFullyConnected(*pool2->getOutput(0), 500, w2, b2);
 	assert(ip1 != nullptr);
 
 	// Add an activation layer using the ReLU algorithm.
@@ -114,7 +137,8 @@ int main() {
     Weights w3 { dt, d3->data_h, d3->inputs*d3->outputs};
     Weights b3 { dt, d3->bias_h, d3->outputs};
 	// Add a second fully connected layer with 20 outputs.
-	auto ip2 = network->addFullyConnected(*relu1->getOutput(0), 10, w3, b3);
+	auto ip2 = addFullyConnected(network, relu1->getOutput(0), d3, w3, b3);
+	//auto ip2 = network->addFullyConnected(*relu1->getOutput(0), 10, w3, b3);
 	assert(ip2 != nullptr);
 
 	// Add a softmax layer to determine the probability.
@@ -125,12 +149,17 @@ int main() {
 	network->markOutput(*prob->getOutput(0));
 
 	// Build the engine
-	builder->setMaxBatchSize(1);
-	config->setMaxWorkspaceSize(1 << 20);
+	//builder->setMaxBatchSize(1);
+	//config->setMaxWorkspaceSize(1 << 20);
+	config->setMemoryPoolLimit(MemoryPoolType::kWORKSPACE, 1 << 20);
 
-	auto engine = builder->buildEngineWithConfig(*network,*config);
+	auto serialized_engine = builder->buildSerializedNetwork(*network,*config);
 	// we don't need the network any more
-	network->destroy();
+	delete network;
+	//network->destroy();
+	//
+	IRuntime* runtime = createInferRuntime(gLogger);
+	ICudaEngine* engine = runtime->deserializeCudaEngine(serialized_engine->data(), serialized_engine->size());
 
 	IExecutionContext *context = engine->createExecutionContext();
 
@@ -142,11 +171,14 @@ int main() {
 
 	// In order to bind the buffers, we need to know the names of the input and output tensors.
 	// note that indices are guaranteed to be less than IEngine::getNbBindings()
-	int inputIndex = engine->getBindingIndex("data"); 
-    int outputIndex = engine->getBindingIndex("out");
 
     float output[10];
 	// create GPU buffers and a stream
+	/*int inputIndex = engine->getBindingIndex("data"); 
+    int outputIndex = engine->getBindingIndex("out");*/
+	int inputIndex = 0;
+	int outputIndex = 1;
+
 	checkCuda(cudaMalloc(&buffers[inputIndex], 28*28*sizeof(float)));
 	checkCuda(cudaMalloc(&buffers[outputIndex], 10*sizeof(float)));
 
@@ -154,7 +186,7 @@ int main() {
 	checkCuda(cudaStreamCreate(&stream));
 
 	// DMA the input to the GPU,  execute the batch asynchronously, and DMA it back:
-    {
+    /*{
         checkCuda(cudaMemcpyAsync(buffers[inputIndex], input_h, 1 * 28*28* sizeof(float), cudaMemcpyHostToDevice, stream));
         cudaStreamSynchronize(stream);  //want to test only the inference time
         TKDNN_TSTART
@@ -162,7 +194,21 @@ int main() {
         TKDNN_TSTOP
         checkCuda(cudaMemcpyAsync(output, buffers[outputIndex],10*sizeof(float), cudaMemcpyDeviceToHost, stream));
         cudaStreamSynchronize(stream);
-    }
+    }*/
+	{
+        checkCuda(cudaMemcpyAsync(buffers[inputIndex], input_h, 1 * 28*28* sizeof(float), cudaMemcpyHostToDevice, stream));
+        cudaStreamSynchronize(stream);  //want to test only the inference time
+        TKDNN_TSTART
+	    for(int i=0; i< engine->getNbIOTensors(); i++) {
+			auto const &name = engine->getIOTensorName(i);
+			auto const &mode = engine->getTensorIOMode(name);
+			context->setTensorAddress(name, buffers[i]);
+		}
+		context->enqueueV3(stream);
+        TKDNN_TSTOP
+        checkCuda(cudaMemcpyAsync(output, buffers[outputIndex],10*sizeof(float), cudaMemcpyDeviceToHost, stream));
+        cudaStreamSynchronize(stream);
+	}
 
     std::cout<<"\n==== CHECK CUDNN RESULT ====\n";
     std::cout<<"Diff: "<<checkResult(dim.tot(), (float*)buffers[outputIndex], data)<<"\n";
@@ -173,8 +219,10 @@ int main() {
 	checkCuda(cudaFree(buffers[outputIndex]));
 
 	// destroy the engine
-	context->destroy();
-	engine->destroy();
+	delete context;
+	delete engine;
+	//context->destroy();
+	//engine->destroy();
 
     return 0;
 }

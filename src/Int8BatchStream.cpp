@@ -37,7 +37,7 @@ bool BatchStream::next() {
         if (mFileBatchPos == mDims.d[0] && !update())
             return false;
 
-        csize = std::min(mBatchSize - batchPos, mDims.d[0] - mFileBatchPos);
+        csize = std::min(mBatchSize - batchPos, (int) mDims.d[0] - mFileBatchPos);
         std::copy_n(getFileBatch() + mFileBatchPos * mImageSize, csize * mImageSize, getBatch() + batchPos * mImageSize);
     }
     mBatchCount++;

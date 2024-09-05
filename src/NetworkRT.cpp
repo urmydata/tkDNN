@@ -5,6 +5,7 @@
 #include <string.h> // memcpy
 #include <stdlib.h>
 #include <set>
+#include <tuple>
 
 #include "kernels.h"
 
@@ -155,6 +156,111 @@ std::set<int> NetworkRT::getInputLayers(Network *net, int start_index, int end_i
 }
 
 
+/*
+std::map<std::pair<int, int>, std::tuple<int, int, int>> NetworkRT::getInputPair(Network *net, int start_index, int end_index)
+{
+    std::map<std::pair<int, int>, std::tuple<int, int, int>> input_size_map;
+    std::map<int, std::list<int>> output_map;
+    bool duplicated_input_flag = false;
+
+    makeOutputMap(net, output_map);
+
+    for(int i=0; i<=start_index; i++) {
+        Layer *l = net->layers[i];
+
+        if(i < start_index) {
+            std::map<int, std::list<int>>::iterator it;
+            it = output_map.find(l->id);
+            if(it != output_map.end()) {
+                std::list<int>::iterator it2;
+                for(it2 = (it->second).begin(); it2 != (it->second).end(); it2++) {
+                    Layer *tl = net->layers[(*it2)];
+
+                    if(tl->id >= start_index && tl->id <= end_index ) {
+                        if(l->id == start_index - 1) {
+                            if(!duplicated_input_flag) {
+                                if(start_index > 0 ) {
+                                    dataDim_t outdim = l->output_dim;
+                                    int size = outdim.c * outdim.h * outdim.w;
+
+                                    // input_size_map.insert(std::make_pair(std::make_pair(l->id, tl->id), size));
+                                    input_size_map.insert(std::make_pair(std::make_pair(l->id, tl->id), std::make_tuple(outdim.c, outdim.h, outdim.w)));
+                                }
+                                duplicated_input_flag = true;
+                            }
+                        }
+                        else {
+                            if(input_size_map.find(std::make_pair(l->id, tl->id)) == input_size_map.end()) {
+                                dataDim_t outdim = l->output_dim;
+                                int size = outdim.c * outdim.h * outdim.w;
+
+                                // input_size_map.insert(std::make_pair(std::make_pair(l->id, tl->id), size));
+                                input_size_map.insert(std::make_pair(std::make_pair(l->id, tl->id), std::make_tuple(-1, -1, -1)));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        else if(i == start_index && i > 0) {
+            Layer *lBefore = net->layers[i-1];
+            if(!(lBefore->getLayerType() == LAYER_ROUTE && ((Route *)lBefore)->layers_n == 1 && ((Route *)lBefore)->groups == 1)) {
+                if(!duplicated_input_flag) {
+                    if(start_index > 0) {
+                        dataDim_t outdim = lBefore->output_dim;
+                        int size = outdim.c * outdim.h * outdim.w;
+
+                        // input_size_map.insert(std::make_pair(std::make_pair(lBefore->id, start_index), size));
+                        input_size_map.insert(std::make_pair(std::make_pair(lBefore->id, start_index), std::make_tuple(outdim.c, outdim.h, outdim.w)));
+                    }
+                }
+            }
+        }
+    }
+
+    return input_size_map;
+}
+
+
+std::map<std::pair<int, int>, std::tuple<int, int, int>> NetworkRT::getOutputPair(Network *net, int start_index, int end_index)
+{
+    std::map<std::pair<int, int>, std::tuple<int, int, int>> output_size_map;
+    std::map<int, std::list<int>> output_map;
+
+    makeOutputMap(net, output_map);
+
+    for(int i=start_index; i<=end_index; i++) {
+        Layer *l = net->layers[i];
+        std::map<int, std::list<int>>::iterator it;
+
+        it = output_map.find(l->id);
+        if(it != output_map.end()) {
+            std::list<int>::iterator it2;
+
+            for(it2 = (it->second).begin(); it2 != (it->second).end(); it2++) {
+                Layer *tl = net->layers[(*it2)];
+                if(tl->id >= end_index + 1 && tl->id <= net->num_layers) {
+                    dataDim_t outdim = l->output_dim;
+                    int size = outdim.c * outdim.h * outdim.w;
+
+                    output_size_map.insert(std::make_pair(std::make_pair(l->id, tl->id), std::make_tuple(outdim.c, outdim.h, outdim.w)));
+                }
+            }
+        }
+
+        if(l->final || l->id == net->num_layers-1) {
+            dataDim_t outdim = l->output_dim;
+            int size = outdim.c * outdim.h * outdim.w;
+            // output_size_map.insert(std::make_pair(std::make_pair(l->id, -1), size));
+            output_size_map.insert(std::make_pair(std::make_pair(l->id, -1), std::make_tuple(outdim.c, outdim.h, outdim.w)));
+        }
+    }
+
+    return output_size_map;
+}
+*/
+
+
 std::map<std::pair<int, int>, int> NetworkRT::getInputPair(Network *net, int start_index, int end_index)
 {
 	std::map<std::pair<int, int>, int> input_size_map;
@@ -279,7 +385,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 
 	startIndex = start_index;
 	if(net->dla) {
-		is_dla = true;	
+		is_dla = true;
 	}
 
 	if(net->int8 && builderRT->platformHasFastInt8()) {
@@ -292,8 +398,11 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
         std::unique_ptr<IInt8EntropyCalibrator2> calibrator;
 
         configRT->setAvgTimingIterations(1);
-        configRT->setMinTimingIterations(1);
+#if NV_TENSORRT_MAJOR > 8
+        configRT->setMemoryPoolLimit(MemoryPoolType::kWORKSPACE, 1 << 30);
+#else
         configRT->setMaxWorkspaceSize(1 << 30);
+#endif
         configRT->setFlag(BuilderFlag::kDEBUG);
 
 #endif
@@ -301,7 +410,11 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
     dataDim_t dim = net->layers[start_index]->input_dim;
     dtRT = DataType::kFLOAT;
 
+#if NV_TENSORRT_MAJOR > 8
+	maxBatchSize = net->maxBatchSize;
+#else
 	builderRT->setMaxBatchSize(net->maxBatchSize);
+#endif
 
 	if(net->fp16 && builderRT->platformHasFastFp16()) {
 			//builderRT->setHalf2Mode(true);
@@ -315,7 +428,13 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 			configRT->setDefaultDeviceType(DeviceType::kDLA);
             configRT->setDLACore(dla_core);
 			configRT->setFlag(BuilderFlag::kGPU_FALLBACK);
+#if NV_TENSORRT_MAJOR >= 10
+			configRT->setFlag(BuilderFlag::kDIRECT_IO);
+			configRT->setFlag(BuilderFlag::kREJECT_EMPTY_ALGORITHMS);
+
+#else
 			configRT->setFlag(BuilderFlag::kSTRICT_TYPES);
+#endif
 			is_dla = true;
 	}
 #endif
@@ -512,7 +631,7 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
 			FatalError("conversion failed");
 
 
-	std::cout<<"Selected maxBatchSize: "<<builderRT->getMaxBatchSize()<<"\n";
+	std::cout<<"Selected maxBatchSize: "<< net->maxBatchSize <<"\n";
 	printCudaMemUsage();
 	std::cout<<"Building tensorRT cuda engine...\n";
 #if NV_TENSORRT_MAJOR >= 6 && NV_TENSORRT_MAJOR <=7         
@@ -546,9 +665,9 @@ NetworkRT::NetworkRT(Network *net, const char *name, int start_index, int end_in
     }
     deserialize(name, dla_core);
 
-	// input and output buffer pointers that we pass to the engine - the engine requires exactly IEngine::getNbBindings(),
-	std::cout<<"Input/outputs numbers: "<<engineRT->getNbBindings()<<"\n";
-    if(engineRT->getNbBindings() > MAX_BUFFERS_RT)
+	// input and output buffer pointers that we pass to the engine - the engine requires exactly IEngine::getNbIOTensors(),
+	std::cout<<"Input/outputs numbers: "<<engineRT->getNbIOTensors()<<"\n";
+    if(engineRT->getNbIOTensors() > MAX_BUFFERS_RT)
         FatalError("over RT buffer array size");
    
    if(builderActive){
@@ -581,16 +700,23 @@ NetworkRT::NetworkRT(Network *net, const char *name) {
         std::unique_ptr<IInt8EntropyCalibrator2> calibrator;
 
         configRT->setAvgTimingIterations(1);
-        configRT->setMinTimingIterations(1);
+#if NV_TENSORRT_MAJOR > 8
+        configRT->setMemoryPoolLimit(MemoryPoolType::kWORKSPACE, 1 << 30);
+#else
         configRT->setMaxWorkspaceSize(1 << 30);
+#endif
         configRT->setFlag(BuilderFlag::kDEBUG);
 
 #endif
         //input and datatype
         dataDim_t dim = net->layers[0]->input_dim;
         dtRT = DataType::kFLOAT;
+#if NV_TENSORRT_MAJOR > 8
+        maxBatchSize = net->maxBatchSize;
+#else
+	    builderRT->setMaxBatchSize(net->maxBatchSize);
+#endif
 
-        builderRT->setMaxBatchSize(net->maxBatchSize);
 
         if(net->fp16 && builderRT->platformHasFastFp16()) {
             dtRT = DataType::kHALF;
@@ -663,7 +789,7 @@ NetworkRT::NetworkRT(Network *net, const char *name) {
         input->setName("out");
         networkRT->markOutput(*input);
 
-        std::cout<<"Selected maxBatchSize: "<<builderRT->getMaxBatchSize()<<"\n";
+        std::cout<<"Selected maxBatchSize: "<< maxBatchSize <<"\n";
         printCudaMemUsage();
         std::cout<<"Building tensorRT cuda engine...\n";
 #if NV_TENSORRT_MAJOR >= 6 && NV_TENSORRT_MAJOR <=7
@@ -700,26 +826,33 @@ NetworkRT::NetworkRT(Network *net, const char *name) {
     std::cout<<"create execution context\n";
 	contextRT = engineRT->createExecutionContext();
 
-	// input and output buffer pointers that we pass to the engine - the engine requires exactly IEngine::getNbBindings(),
-	std::cout<<"Input/outputs numbers: "<<engineRT->getNbBindings()<<"\n";
-    if(engineRT->getNbBindings() > MAX_BUFFERS_RT)
+	// input and output buffer pointers that we pass to the engine - the engine requires exactly IEngine::getNbIOTensors(),
+	std::cout<<"Input/outputs numbers: "<<engineRT->getNbIOTensors()<<"\n";
+    if(engineRT->getNbIOTensors() > MAX_BUFFERS_RT)
         FatalError("over RT buffer array size");
 
 	// In order to bind the buffers, we need to know the names of the input and output tensors.
-	// note that indices are guaranteed to be less than IEngine::getNbBindings()
+	// note that indices are guaranteed to be less than IEngine::getNbIOTensors()
+
+
+#if NV_TENSORRT_MAJOR > 8
+	Dims iDim = engineRT->getTensorShape("data");
+	Dims oDim = engineRT->getTensorShape("out");
+#else
 	buf_input_idx = engineRT->getBindingIndex("data"); 
     buf_output_idx = engineRT->getBindingIndex("out");
     std::cout<<"input index = "<<buf_input_idx<<" -> output index = "<<buf_output_idx<<"\n";
 
-
     Dims iDim = engineRT->getBindingDimensions(buf_input_idx);
+    Dims oDim = engineRT->getBindingDimensions(buf_output_idx);
+#endif
+
     input_dim.n = 1;
     input_dim.c = iDim.d[0];
     input_dim.h = iDim.d[1];
     input_dim.w = iDim.d[2];
     input_dim.print();
 
-    Dims oDim = engineRT->getBindingDimensions(buf_output_idx);
     output_dim.n = 1;
     output_dim.c = oDim.d[0];
     output_dim.h = oDim.d[1];
@@ -731,23 +864,36 @@ NetworkRT::NetworkRT(Network *net, const char *name) {
     std::cout<<"NUMBER OF LAYERS IN ENGINE : "<<engineRT->getNbLayers()<<std::endl;
 	
     // create GPU buffers and a stream
-    for(int i=0; i<engineRT->getNbBindings(); i++) {
+    for(int i=0; i<engineRT->getNbIOTensors(); i++) {
+#if NV_TENSORRT_MAJOR > 8
+        const char *tensor_name = engineRT->getIOTensorName(i);
+        Dims dim = engineRT->getTensorShape(tensor_name);
+#else
         Dims dim = engineRT->getBindingDimensions(i);
+#endif
         buffersDIM[i] = dataDim_t(1, dim.d[0], dim.d[1], dim.d[2]);
         std::cout<<"RtBuffer "<<i<<"   dim: "; buffersDIM[i].print();
-        checkCuda(cudaMalloc(&buffersRT[i], engineRT->getMaxBatchSize()*dim.d[0]*dim.d[1]*dim.d[2]*sizeof(dnnType)));
+        checkCuda(cudaMalloc(&buffersRT[i], maxBatchSize*dim.d[0]*dim.d[1]*dim.d[2]*sizeof(dnnType)));
     }
-    checkCuda(cudaMalloc(&output, engineRT->getMaxBatchSize()*output_dim.tot()*sizeof(dnnType)));
+    checkCuda(cudaMalloc(&output, maxBatchSize*output_dim.tot()*sizeof(dnnType)));
 	checkCuda(cudaStreamCreate(&stream));
 }
 
 NetworkRT::~NetworkRT() {
 	if(engineRT != nullptr){
+#if NV_TENSORRT_MAJOR > 8
+		delete engineRT;
+#else
 		engineRT->destroy();
+#endif
 	}
 		
 	if(runtimeRT != nullptr) {
+#if NV_TENSORRT_MAJOR > 8
+		delete runtimeRT;
+#else
 		runtimeRT->destroy();
+#endif
 	}
 
 /*	if(builderRT != nullptr) {
@@ -773,12 +919,21 @@ void NetworkRT::run_on_dla(ILayer*l) {
 
 dnnType* NetworkRT::infer(dataDim_t &dim, dnnType* data) {
     int batches = dim.n;
-    if(batches > getMaxBatchSize()) {
+    if(batches > maxBatchSize) {
         FatalError("input batch size too large");
     }
 
     checkCuda(cudaMemcpyAsync(buffersRT[buf_input_idx], data, batches*input_dim.tot()*sizeof(dnnType), cudaMemcpyDeviceToDevice, stream));
+#if NV_TENSORRT_MAJOR > 8
+    for(int i=0; i< engineRT->getNbIOTensors(); i++) {
+		auto const &name = engineRT->getIOTensorName(i);
+		auto const &mode = engineRT->getTensorIOMode(name);
+		contextRT->setTensorAddress(name, buffersRT[i]);
+	}
+	contextRT->enqueueV3(stream);
+#else
     contextRT->enqueue(batches, buffersRT, stream, nullptr);
+#endif
     checkCuda(cudaMemcpyAsync(output, buffersRT[buf_output_idx], batches*output_dim.tot()*sizeof(dnnType), cudaMemcpyDeviceToDevice, stream));
     checkCuda(cudaStreamSynchronize(stream));
 
@@ -789,7 +944,16 @@ dnnType* NetworkRT::infer(dataDim_t &dim, dnnType* data) {
 }
 
 void NetworkRT::enqueue(int batchSize) {
-    contextRT->enqueue(batchSize, buffersRT, stream, nullptr);
+#if NV_TENSORRT_MAJOR > 8
+    for(int i=0; i< engineRT->getNbIOTensors(); i++) {
+		auto const &name = engineRT->getIOTensorName(i);
+		auto const &mode = engineRT->getTensorIOMode(name);
+		contextRT->setTensorAddress(name, buffersRT[i]);
+	}
+	contextRT->enqueueV3(stream);
+#else
+    contextRT->enqueue(batches, buffersRT, stream, nullptr);
+#endif
 }
 
 ILayer* NetworkRT::convert_layer(ITensor *input, Layer *l) {
@@ -849,9 +1013,28 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Dense *l) {
 
     Weights w { dtRT, data_b, l->inputs*l->outputs};
     Weights b = { dtRT, bias_b, l->outputs};
-    IFullyConnectedLayer *lRT = networkRT->addFullyConnected(*input, l->outputs, w, b);
 
+#if NV_TENSORRT_MAJOR > 8
+    IConstantLayer *weightLayer = networkRT->addConstant(Dims2{l->inputs, l->outputs}, w);
+    //IConstantLayer *weightLayer = networkRT->addConstant(Dims2{l->outputs, l->inputs}, w);
+    checkNULL(weightLayer);
+    ITensor *weightTensor = weightLayer->getOutput(0);
+
+    IMatrixMultiplyLayer *lmmRT = networkRT->addMatrixMultiply(*input, MatrixOperation::kNONE, *weightTensor, MatrixOperation::kTRANSPOSE);
+    //IMatrixMultiplyLayer *lmmRT = networkRT->addMatrixMultipy(*input, MatrixOperation::kNONE, *weightTensor, MatrixOperation::kNONE);
+    checkNULL(lmmRT);
+    ITensor *mmTensor = lmmRT->getOutput(0);
+
+    IConstantLayer *lbiasRT = networkRT->addConstant(Dims2{1, l->outputs}, b);
+    checkNULL(lbiasRT);
+    ITensor *biasTensor = lbiasRT->getOutput(0);
+
+    IElementWiseLayer *lRT = networkRT->addElementWise(*mmTensor, *biasTensor, ElementWiseOperation::kSUM);
     checkNULL(lRT);
+#else
+    IFullyConnectedLayer *lRT = networkRT->addFullyConnected(*input, l->outputs, w, b);
+    checkNULL(lRT);
+#endif
     return lRT;
 }
 
@@ -1297,7 +1480,7 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Resize *l) {
     IResizeLayer *lRT = networkRT->addResize(*input); //default is kNEAREST
     checkNULL(lRT);
     Dims d{};
-    lRT->setResizeMode(ResizeMode(l->mode));
+    lRT->setResizeMode(InterpolationMode(l->mode));
     lRT->setOutputDimensions(Dims3{l->output_dim.c, l->output_dim.h, l->output_dim.w});
     return lRT;
 }
@@ -1437,8 +1620,14 @@ ILayer* NetworkRT::convert_layer(ITensor *input, Upsample *l) {
     Weights emptywts{DataType::kFLOAT, nullptr, 0};
     Weights upsamplewts{DataType::kFLOAT, deval, l->output_dim.c * l->stride * l->stride};
 
+#if NV_TENSORRT_MAJOR > 8
+    IDeconvolutionLayer *lRT = networkRT->addDeconvolutionNd(*input, l->output_dim.c, DimsHW{l->stride, l->stride}, upsamplewts, emptywts);
+    checkNULL(lRT);
+#else
     IDeconvolutionLayer *lRT = networkRT->addDeconvolution(*input, l->output_dim.c, DimsHW{l->stride, l->stride}, upsamplewts, emptywts);
     checkNULL(lRT);
+#endif
+
     lRT->setStrideNd(DimsHW{l->stride, l->stride});
     lRT->setNbGroups(l->output_dim.c);
     return lRT;

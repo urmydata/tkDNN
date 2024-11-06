@@ -28,7 +28,7 @@ int main(int argc, char *argv[]) {
     dnnType *input = new float[idim.tot()];
     dnnType *output = new float[odim.tot()];
     dnnType *input_d;
-    checkCuda( cudaMalloc(&input_d, idim.tot()*sizeof(dnnType)));
+    checkCuda( cudaMalloc((void **) &input_d, idim.tot()*sizeof(dnnType)));
 
     int ret_tensorrt = 0; 
     std::cout<<"Testing with batchsize: "<<BATCH_SIZE<<"\n";

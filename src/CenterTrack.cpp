@@ -42,8 +42,8 @@ bool CenterTrack::init_preprocessing(){
     
 #ifdef OPENCV_CUDACONTRIB
     std::cout<<"OPENCV CPMTROB\n";
-    checkCuda( cudaMalloc(&mean_d, 3 * sizeof(float)) );
-    checkCuda( cudaMalloc(&stddev_d, 3 * sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &mean_d, 3 * sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &stddev_d, 3 * sizeof(float)) );
     float mean[3]   = {0.40789655, 0.44719303, 0.47026116};
     float stddev[3] = {0.2886383, 0.27408165, 0.27809834};
     
@@ -51,15 +51,15 @@ bool CenterTrack::init_preprocessing(){
     checkCuda( cudaMemcpy(stddev_d, stddev, 3*sizeof(float), cudaMemcpyHostToDevice));
 #else
     std::cout<<"NO OPENCV CPMTROB\n";
-    checkCuda( cudaMallocHost(&input, sizeof(dnnType)*dim.tot() * nBatches));
+    checkCuda( cudaMallocHost((void **) &input, sizeof(dnnType)*dim.tot() * nBatches));
     mean    << 0.40789655, 0.44719303, 0.47026116;
     stddev  << 0.2886383, 0.27408165, 0.27809834;
     
 #endif
 
-    checkCuda( cudaMalloc(&input_d, sizeof(dnnType)*netRT->input_dim.tot() * nBatches));
-    checkCuda( cudaMalloc(&input_pre_inf_d, sizeof(dnnType)*dim.tot()));
-    checkCuda( cudaMalloc(&d_ptrs, dim.tot() * sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &input_d, sizeof(dnnType)*netRT->input_dim.tot() * nBatches));
+    checkCuda( cudaMalloc((void **) &input_pre_inf_d, sizeof(dnnType)*dim.tot()));
+    checkCuda( cudaMalloc((void **) &d_ptrs, dim.tot() * sizeof(float)) );
     return true;
 }
 
@@ -72,12 +72,12 @@ bool CenterTrack::init_pre_inf(){
     dim_in0 = tk::dnn::dataDim_t(1, 3, 512, 512, 1);
     dim_in1 = tk::dnn::dataDim_t(1, 1, 512, 512, 1);
     
-    checkCuda( cudaMalloc(&out_d, netRT->input_dim.tot()*sizeof(dnnType)) );
-    checkCuda( cudaMalloc(&img_d, dim_in0.tot()*sizeof(dnnType)) );
-    checkCuda( cudaMalloc(&hm_d, dim_in1.tot()*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &out_d, netRT->input_dim.tot()*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &img_d, dim_in0.tot()*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &hm_d, dim_in1.tot()*sizeof(dnnType)) );
     // init to zeros hm
     dnnType *hm_h;
-    checkCuda( cudaMallocHost(&hm_h, 1 * dim.h * dim.w*sizeof(dnnType)) ); 
+    checkCuda( cudaMallocHost((void **) &hm_h, 1 * dim.h * dim.w*sizeof(dnnType)) );
     for(int i=0; i<1 * dim.h * dim.w; i++)
         hm_h[i] = 0.0f;
     checkCuda( cudaMemcpy(hm_d, hm_h, 1 * dim.h * dim.w * sizeof(dnnType), cudaMemcpyHostToDevice) );
@@ -129,65 +129,65 @@ bool CenterTrack::init_postprocessing(){
     dim_dim             = tk::dnn::dataDim_t(1, 3, 128, 128, 1);
     dim_amodel_offset   = tk::dnn::dataDim_t(1, 2, 128, 128, 1);
 
-    checkCuda( cudaMalloc(&topk_scores, dim_hm.c * K *sizeof(float)) );
-    checkCuda( cudaMalloc(&topk_inds_, dim_hm.c * K *sizeof(int)) );      
-    checkCuda( cudaMalloc(&topk_ys_, dim_hm.c * K *sizeof(float)) );      
-    checkCuda( cudaMalloc(&topk_xs_, dim_hm.c * K *sizeof(float)) );    
-    checkCuda( cudaMalloc(&ids_d, dim_hm.c * dim_hm.h * dim_hm.w*sizeof(int)) );
-    checkCuda( cudaMallocHost(&ids_, dim_hm.c * dim_hm.h * dim_hm.w*sizeof(int)) );
+    checkCuda( cudaMalloc((void **) &topk_scores, dim_hm.c * K *sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &topk_inds_, dim_hm.c * K *sizeof(int)) );
+    checkCuda( cudaMalloc((void **) &topk_ys_, dim_hm.c * K *sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &topk_xs_, dim_hm.c * K *sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &ids_d, dim_hm.c * dim_hm.h * dim_hm.w*sizeof(int)) );
+    checkCuda( cudaMallocHost((void **) &ids_, dim_hm.c * dim_hm.h * dim_hm.w*sizeof(int)) );
     for(int i=0; i<dim_hm.c * dim_hm.h * dim_hm.w; i++){
         ids_[i] = i;
     }
     
-    checkCuda( cudaMalloc(&ones, dim_dep.c * dim_dep.h * dim_dep.w * sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &ones, dim_dep.c * dim_dep.h * dim_dep.w * sizeof(float)) );
     float *ones_h;
-    checkCuda( cudaMallocHost(&ones_h, dim_dep.c * dim_dep.h * dim_dep.w * sizeof(float)) );
+    checkCuda( cudaMallocHost((void **) &ones_h, dim_dep.c * dim_dep.h * dim_dep.w * sizeof(float)) );
     for(int i=0; i<dim_dep.c * dim_dep.h * dim_dep.w; i++)
         ones_h[i] = 1.0f;
     checkCuda( cudaMemcpy(ones, ones_h, dim_dep.c * dim_dep.h * dim_dep.w * sizeof(float), cudaMemcpyHostToDevice) );
     checkCuda( cudaFreeHost(ones_h) );
 
-    checkCuda( cudaMallocHost(&scores, K *sizeof(float)) );
-    checkCuda( cudaMalloc(&scores_d, K *sizeof(float)) );
+    checkCuda( cudaMallocHost((void **) &scores, K *sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &scores_d, K *sizeof(float)) );
 
-    checkCuda( cudaMallocHost(&clses, K *sizeof(int)) );
-    checkCuda( cudaMalloc(&clses_d, K *sizeof(int)) );
+    checkCuda( cudaMallocHost((void **) &clses, K *sizeof(int)) );
+    checkCuda( cudaMalloc((void **) &clses_d, K *sizeof(int)) );
 
-    checkCuda( cudaMalloc(&topk_inds_d, K *sizeof(int)) );
-    checkCuda( cudaMalloc(&topk_ys_d, K *sizeof(float)) );     
-    checkCuda( cudaMalloc(&topk_xs_d, K *sizeof(float)) ); 
-    checkCuda( cudaMalloc(&inttopk_ys_d, K *sizeof(int)) );
-    checkCuda( cudaMalloc(&inttopk_xs_d, K *sizeof(int)) );
+    checkCuda( cudaMalloc((void **) &topk_inds_d, K *sizeof(int)) );
+    checkCuda( cudaMalloc((void **) &topk_ys_d, K *sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &topk_xs_d, K *sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &inttopk_ys_d, K *sizeof(int)) );
+    checkCuda( cudaMalloc((void **) &inttopk_xs_d, K *sizeof(int)) );
 
-    checkCuda( cudaMallocHost(&bbx0, K * sizeof(float)) ); 
-    checkCuda( cudaMallocHost(&bby0, K * sizeof(float)) ); 
-    checkCuda( cudaMallocHost(&bbx1, K * sizeof(float)) ); 
-    checkCuda( cudaMallocHost(&bby1, K * sizeof(float)) ); 
-    checkCuda( cudaMalloc(&bbx0_d, K * sizeof(float)) ); 
-    checkCuda( cudaMalloc(&bby0_d, K * sizeof(float)) ); 
-    checkCuda( cudaMalloc(&bbx1_d, K * sizeof(float)) ); 
-    checkCuda( cudaMalloc(&bby1_d, K * sizeof(float)) );
+    checkCuda( cudaMallocHost((void **) &bbx0, K * sizeof(float)) );
+    checkCuda( cudaMallocHost((void **) &bby0, K * sizeof(float)) );
+    checkCuda( cudaMallocHost((void **) &bbx1, K * sizeof(float)) );
+    checkCuda( cudaMallocHost((void **) &bby1, K * sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &bbx0_d, K * sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &bby0_d, K * sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &bbx1_d, K * sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &bby1_d, K * sizeof(float)) );
 
-    checkCuda( cudaMallocHost(&intxs, K  * sizeof(int)) ); 
-    checkCuda( cudaMallocHost(&intys, K  * sizeof(int)) ); 
+    checkCuda( cudaMallocHost((void **) &intxs, K  * sizeof(int)) );
+    checkCuda( cudaMallocHost((void **) &intys, K  * sizeof(int)) );
 
-    checkCuda( cudaMallocHost(&track, K * dim_track.c * sizeof(float)) );
-    checkCuda( cudaMallocHost(&dep, K * dim_dep.c * sizeof(float)) ); 
-    checkCuda( cudaMallocHost(&rot, K * dim_rot.c * sizeof(float)) ); 
-    checkCuda( cudaMallocHost(&dim_, K * dim_dim.c * sizeof(float)) ); 
-    checkCuda( cudaMallocHost(&wh, K * dim_wh.c * sizeof(float)) );
-    checkCuda( cudaMallocHost(&amodel_offset, K * dim_amodel_offset.c * sizeof(float)) );
-    checkCuda( cudaMalloc(&track_d, K * dim_track.c * sizeof(float)) ); 
-    checkCuda( cudaMalloc(&dep_d, K * dim_dep.c * sizeof(float)) ); 
-    checkCuda( cudaMalloc(&rot_d, K * dim_rot.c * sizeof(float)) ); 
-    checkCuda( cudaMalloc(&dim_d, K * dim_dim.c * sizeof(float)) ); 
-    checkCuda( cudaMalloc(&wh_d, K * dim_wh.c * sizeof(float)) );  
-    checkCuda( cudaMalloc(&amodel_offset_d, K * dim_amodel_offset.c * sizeof(float)) ); 
+    checkCuda( cudaMallocHost((void **) &track, K * dim_track.c * sizeof(float)) );
+    checkCuda( cudaMallocHost((void **) &dep, K * dim_dep.c * sizeof(float)) );
+    checkCuda( cudaMallocHost((void **) &rot, K * dim_rot.c * sizeof(float)) );
+    checkCuda( cudaMallocHost((void **) &dim_, K * dim_dim.c * sizeof(float)) );
+    checkCuda( cudaMallocHost((void **) &wh, K * dim_wh.c * sizeof(float)) );
+    checkCuda( cudaMallocHost((void **) &amodel_offset, K * dim_amodel_offset.c * sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &track_d, K * dim_track.c * sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &dep_d, K * dim_dep.c * sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &rot_d, K * dim_rot.c * sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &dim_d, K * dim_dim.c * sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &wh_d, K * dim_wh.c * sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &amodel_offset_d, K * dim_amodel_offset.c * sizeof(float)) );
 
-    checkCuda( cudaMallocHost(&target_coords, 4 * K *sizeof(float)) );
+    checkCuda( cudaMallocHost((void **) &target_coords, 4 * K *sizeof(float)) );
 
     for(int bi=0; bi<nBatches; bi++) {
-        cv::Mat calibs_ = cv::Mat::zeros(cv::Size(4,3), CV_32F);        
+        cv::Mat calibs_ = cv::Mat::zeros(cv::Size(4,3), CV_32F);
         if(inputCalibs.size() == 0 || inputCalibs[bi].empty()) {
             calibs_.at<float>(0,0) = 633.0;
             calibs_.at<float>(1,1) = 633.0;
@@ -198,8 +198,8 @@ bool CenterTrack::init_postprocessing(){
     }
 
     // Alloc array used in the kernel 
-    checkCuda( cudaMalloc(&src_out, K *sizeof(float)) );
-    checkCuda( cudaMalloc(&ids_out, K *sizeof(int)) );
+    checkCuda( cudaMalloc((void **) &src_out, K *sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &ids_out, K *sizeof(int)) );
 
     trRes.resize(nBatches);
     countTr.resize(nBatches, 0);

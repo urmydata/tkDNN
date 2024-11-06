@@ -7,7 +7,7 @@ namespace tk { namespace dnn {
 
 Softmax::Softmax(Network *net, const tk::dnn::dataDim_t* dim, const cudnnSoftmaxMode_t mode) : Layer(net) {
 
-    checkCuda( cudaMalloc(&dstData, input_dim.tot()*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &dstData, input_dim.tot()*sizeof(dnnType)) );
 
     this->mode = mode;
     if(dim == nullptr)

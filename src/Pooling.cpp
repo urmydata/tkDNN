@@ -76,15 +76,15 @@ Pooling::Pooling( Network *net, int winH, int winW, int strideH, int strideW,
     output_dim.w = w;
     output_dim.l = l;
 
-    checkCuda( cudaMalloc(&dstData, output_dim.tot()*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &dstData, output_dim.tot()*sizeof(dnnType)) );
 
     //pool on 3d data need transposition at the enter and on the exit
     //allocate for initial and final transposition
     if(poolOn3d) {
         output_dim.n = 1;
 
-        checkCuda( cudaMalloc(&tmpInputData, input_dim.tot()*sizeof(dnnType)) );
-        checkCuda( cudaMalloc(&tmpOutputData, output_dim.tot()*sizeof(dnnType)) );
+        checkCuda( cudaMalloc((void **) &tmpInputData, input_dim.tot()*sizeof(dnnType)) );
+        checkCuda( cudaMalloc((void **) &tmpOutputData, output_dim.tot()*sizeof(dnnType)) );
     }
 
 }

@@ -43,20 +43,20 @@ bool CenternetDetection::init(const std::string& tensor_path, const int n_classe
     trans = cv::Mat(cv::Size(3,2), CV_32F);
     trans2 = cv::Mat(cv::Size(3,2), CV_32F);
 
-    checkCuda(cudaMalloc(&input_d, sizeof(dnnType)*netRT->input_dim.tot() * nBatches));
+    checkCuda(cudaMalloc((void **)&input_d, sizeof(dnnType)*netRT->input_dim.tot() * nBatches));
 
     dim_hm = tk::dnn::dataDim_t(1, 80, 128, 128, 1);
     dim_wh = tk::dnn::dataDim_t(1, 2, 128, 128, 1);
     dim_reg = tk::dnn::dataDim_t(1, 2, 128, 128, 1);
 
-    checkCuda( cudaMalloc(&topk_scores, dim_hm.c * K *sizeof(float)) );
-    checkCuda( cudaMalloc(&topk_inds_, dim_hm.c * K *sizeof(int)) );      
-    checkCuda( cudaMalloc(&topk_ys_, dim_hm.c * K *sizeof(float)) );      
-    checkCuda( cudaMalloc(&topk_xs_, dim_hm.c * K *sizeof(float)) );    
-    checkCuda( cudaMalloc(&ids_d, dim_hm.c * dim_hm.h * dim_hm.w*sizeof(int)) );
-    checkCuda( cudaMalloc(&ids_2d, dim_hm.c * dim_hm.h * dim_hm.w*sizeof(int)) );
-    checkCuda( cudaMallocHost(&ids_, dim_hm.c * dim_hm.h * dim_hm.w*sizeof(int)) );
-    checkCuda( cudaMallocHost(&ids_2, dim_hm.c * dim_hm.h * dim_hm.w*sizeof(int)) );
+    checkCuda( cudaMalloc((void **) &topk_scores, dim_hm.c * K *sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &topk_inds_, dim_hm.c * K *sizeof(int)) );
+    checkCuda( cudaMalloc((void **) &topk_ys_, dim_hm.c * K *sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &topk_xs_, dim_hm.c * K *sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &ids_d, dim_hm.c * dim_hm.h * dim_hm.w*sizeof(int)) );
+    checkCuda( cudaMalloc((void **) &ids_2d, dim_hm.c * dim_hm.h * dim_hm.w*sizeof(int)) );
+    checkCuda( cudaMallocHost((void **) &ids_, dim_hm.c * dim_hm.h * dim_hm.w*sizeof(int)) );
+    checkCuda( cudaMallocHost((void **) &ids_2, dim_hm.c * dim_hm.h * dim_hm.w*sizeof(int)) );
     for(int i =0; i<dim_hm.c * dim_hm.h * dim_hm.w; i++){
         ids_[i] = i;
     }
@@ -67,49 +67,49 @@ bool CenternetDetection::init(const std::string& tensor_path, const int n_classe
             val = 0;
     }
 
-    checkCuda( cudaMallocHost(&scores, K *sizeof(float)) );
-    checkCuda( cudaMalloc(&scores_d, K *sizeof(float)) );
+    checkCuda( cudaMallocHost((void **) &scores, K *sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &scores_d, K *sizeof(float)) );
 
-    checkCuda( cudaMallocHost(&clses, K *sizeof(int)) );
-    checkCuda( cudaMalloc(&clses_d, K *sizeof(int)) );
+    checkCuda( cudaMallocHost((void **) &clses, K *sizeof(int)) );
+    checkCuda( cudaMalloc((void **) &clses_d, K *sizeof(int)) );
 
-    checkCuda( cudaMalloc(&topk_inds_d, K *sizeof(int)) );
-    checkCuda( cudaMalloc(&topk_ys_d, K *sizeof(float)) );     
-    checkCuda( cudaMalloc(&topk_xs_d, K *sizeof(float)) ); 
-    checkCuda( cudaMalloc(&inttopk_ys_d, K *sizeof(int)) );
-    checkCuda( cudaMalloc(&inttopk_xs_d, K *sizeof(int)) );
+    checkCuda( cudaMalloc((void **) &topk_inds_d, K *sizeof(int)) );
+    checkCuda( cudaMalloc((void **) &topk_ys_d, K *sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &topk_xs_d, K *sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &inttopk_ys_d, K *sizeof(int)) );
+    checkCuda( cudaMalloc((void **) &inttopk_xs_d, K *sizeof(int)) );
 
-    checkCuda( cudaMallocHost(&bbx0, K * sizeof(float)) ); 
-    checkCuda( cudaMallocHost(&bby0, K * sizeof(float)) ); 
-    checkCuda( cudaMallocHost(&bbx1, K * sizeof(float)) ); 
-    checkCuda( cudaMallocHost(&bby1, K * sizeof(float)) ); 
-    checkCuda( cudaMalloc(&bbx0_d, K * sizeof(float)) ); 
-    checkCuda( cudaMalloc(&bby0_d, K * sizeof(float)) ); 
-    checkCuda( cudaMalloc(&bbx1_d, K * sizeof(float)) ); 
-    checkCuda( cudaMalloc(&bby1_d, K * sizeof(float)) ); 
+    checkCuda( cudaMallocHost((void **) &bbx0, K * sizeof(float)) );
+    checkCuda( cudaMallocHost((void **) &bby0, K * sizeof(float)) );
+    checkCuda( cudaMallocHost((void **) &bbx1, K * sizeof(float)) );
+    checkCuda( cudaMallocHost((void **) &bby1, K * sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &bbx0_d, K * sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &bby0_d, K * sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &bbx1_d, K * sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &bby1_d, K * sizeof(float)) );
 
-    checkCuda( cudaMallocHost(&target_coords, 4 * K *sizeof(float)) );
+    checkCuda( cudaMallocHost((void **) &target_coords, 4 * K *sizeof(float)) );
 
 #ifdef OPENCV_CUDACONTRIB
 
-    checkCuda( cudaMalloc(&mean_d, 3 * sizeof(float)) );
-    checkCuda( cudaMalloc(&stddev_d, 3 * sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &mean_d, 3 * sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &stddev_d, 3 * sizeof(float)) );
     float mean[3] = {0.408, 0.447, 0.47};
     float stddev[3] = {0.289, 0.274, 0.278};
     
     checkCuda(cudaMemcpy(mean_d, mean, 3*sizeof(float), cudaMemcpyHostToDevice));
     checkCuda(cudaMemcpy(stddev_d, stddev, 3*sizeof(float), cudaMemcpyHostToDevice));
 #else
-    checkCuda(cudaMallocHost(&input, sizeof(dnnType)*netRT->input_dim.tot()* nBatches));
+    checkCuda(cudaMallocHost((void **) &input, sizeof(dnnType)*netRT->input_dim.tot()* nBatches));
     mean << 0.408, 0.447, 0.47;
     stddev << 0.289, 0.274, 0.278;
 #endif
 
-    checkCuda( cudaMalloc(&d_ptrs, dim.c * dim.h*dim.w * sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &d_ptrs, dim.c * dim.h*dim.w * sizeof(float)) );
 
     // Alloc array used in the kernel 
-    checkCuda( cudaMalloc(&src_out, K *sizeof(float)) );
-    checkCuda( cudaMalloc(&ids_out, K *sizeof(int)) );
+    checkCuda( cudaMalloc((void **) &src_out, K *sizeof(float)) );
+    checkCuda( cudaMalloc((void **) &ids_out, K *sizeof(int)) );
 
     dst2.at<float>(0,0)=width * 0.5;
     dst2.at<float>(0,1)=width * 0.5;

@@ -7,7 +7,7 @@ namespace tk { namespace dnn {
 
 Flatten::Flatten(Network *net) : Layer(net) {
 
-    checkCuda( cudaMalloc(&dstData, input_dim.tot()*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &dstData, input_dim.tot()*sizeof(dnnType)) );
 
     output_dim.n = 1;
     output_dim.c = input_dim.tot();

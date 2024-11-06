@@ -29,20 +29,20 @@ void DeformConv2d::initCUDNN() {
     if( dst_dim % 3 != 0 )
         FatalError("DeformConv2d: the Conv2d output is not divisible by three");
     chunk_dim = dst_dim/3;
-    checkCuda( cudaMalloc(&offset, 2*chunk_dim*sizeof(dnnType)));
-    checkCuda( cudaMalloc(&mask, chunk_dim*sizeof(dnnType)));
+    checkCuda( cudaMalloc((void **) &offset, 2*chunk_dim*sizeof(dnnType)));
+    checkCuda( cudaMalloc((void **) &mask, chunk_dim*sizeof(dnnType)));
     
     // kernel ones
-    checkCuda( cudaMalloc(&ones_d1, (height_ones*width_ones)*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &ones_d1, (height_ones*width_ones)*sizeof(dnnType)) );
     dnnType *ones_h1;
-    checkCuda( cudaMallocHost(&ones_h1, (height_ones*width_ones)*sizeof(dnnType)) );
+    checkCuda( cudaMallocHost((void **) &ones_h1, (height_ones*width_ones)*sizeof(dnnType)) );
     for(int i=0; i<height_ones*width_ones; i++)
         ones_h1[i]=1.0f;
     checkCuda( cudaMemcpy(ones_d1, ones_h1, (height_ones*width_ones)*sizeof(dnnType), cudaMemcpyHostToDevice) );
     checkCuda( cudaFreeHost(ones_h1) );
-    checkCuda( cudaMalloc(&ones_d2, dim_ones*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &ones_d2, dim_ones*sizeof(dnnType)) );
     dnnType *ones_h2;
-    checkCuda( cudaMallocHost(&ones_h2, dim_ones*sizeof(dnnType)) );
+    checkCuda( cudaMallocHost((void **) &ones_h2, dim_ones*sizeof(dnnType)) );
     for(int i=0; i<dim_ones; i++)
         ones_h2[i]=1.0f;
     checkCuda( cudaMemcpy(ones_d2, ones_h2, (dim_ones)*sizeof(dnnType), cudaMemcpyHostToDevice) );
@@ -80,7 +80,7 @@ DeformConv2d::DeformConv2d( Network *net, int out_ch, int deformable_group, int 
         MACC = input_dim.c*kernelH*kernelW*output_dim.c*output_dim.w*output_dim.h;
         
     //allocate data for infer result
-    checkCuda( cudaMalloc(&dstData, output_dim.tot()*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &dstData, output_dim.tot()*sizeof(dnnType)) );
 }
 
 DeformConv2d::~DeformConv2d() {

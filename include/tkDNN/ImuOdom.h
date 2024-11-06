@@ -61,9 +61,9 @@ class ImuOdom {
             dim1 = tk::dnn::dataDim_t(1, 3, 1, 100);
             dim2 = tk::dnn::dataDim_t(1, 3, 1, 100);
 
-            checkCuda( cudaMalloc(&i0_d, dim0.tot()*sizeof(dnnType)) );
-            checkCuda( cudaMalloc(&i1_d, dim1.tot()*sizeof(dnnType)) );
-            checkCuda( cudaMalloc(&i2_d, dim2.tot()*sizeof(dnnType)) );
+            checkCuda( cudaMalloc((void **)&i0_d, dim0.tot()*sizeof(dnnType)) );
+            checkCuda( cudaMalloc((void **)&i1_d, dim1.tot()*sizeof(dnnType)) );
+            checkCuda( cudaMalloc((void **)&i2_d, dim2.tot()*sizeof(dnnType)) );
 
             std::string c0_bin = layers_path + "/conv1d_7.bin";
             std::string c1_bin = layers_path + "/conv1d_8.bin";

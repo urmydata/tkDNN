@@ -873,9 +873,9 @@ NetworkRT::NetworkRT(Network *net, const char *name) {
 #endif
         buffersDIM[i] = dataDim_t(1, dim.d[0], dim.d[1], dim.d[2]);
         std::cout<<"RtBuffer "<<i<<"   dim: "; buffersDIM[i].print();
-        checkCuda(cudaMalloc(&buffersRT[i], maxBatchSize*dim.d[0]*dim.d[1]*dim.d[2]*sizeof(dnnType)));
+        checkCuda(cudaMalloc((void **) &buffersRT[i], maxBatchSize*dim.d[0]*dim.d[1]*dim.d[2]*sizeof(dnnType)));
     }
-    checkCuda(cudaMalloc(&output, maxBatchSize*output_dim.tot()*sizeof(dnnType)));
+    checkCuda(cudaMalloc((void **) &output, maxBatchSize*output_dim.tot()*sizeof(dnnType)));
 	checkCuda(cudaStreamCreate(&stream));
 }
 
@@ -1184,28 +1184,28 @@ ILayer* NetworkRT::convert_layer(ITensor *input,MulAdd *l){
         dnnType * scales_d = nullptr;
         dnnType * shift_d = nullptr;
 
-        cudaMalloc(&power_d, size*sizeof(dnnType));
+        cudaMalloc((void **) &power_d, size*sizeof(dnnType));
         cudaMemcpy(power_d, power_b, size*sizeof(dnnType), cudaMemcpyHostToDevice);
 
-        cudaMalloc(&shift_d, size*sizeof(dnnType));
+        cudaMalloc((void **) &shift_d, size*sizeof(dnnType));
         cudaMemcpy(shift_d, shift_b, size*sizeof(dnnType), cudaMemcpyHostToDevice);
 
-        cudaMalloc(&scales_d, size*sizeof(dnnType));
+        cudaMalloc((void **) &scales_d, size*sizeof(dnnType));
         cudaMemcpy(scales_d, scales_b, size*sizeof(dnnType), cudaMemcpyHostToDevice);
 
         //convert to fp16
         power16_h = new __half[size];
-        cudaMalloc(&power16_d, size*sizeof(__half));
+        cudaMalloc((void **) &power16_d, size*sizeof(__half));
         float2half(power_d, power16_d, size);
         cudaMemcpy(power16_h, power16_d, size*sizeof(__half), cudaMemcpyDeviceToHost);
 
         shift16_h = new __half[size];
-        cudaMalloc(&shift16_d, size*sizeof(__half));
+        cudaMalloc((void **) &shift16_d, size*sizeof(__half));
         float2half(shift_d, shift16_d, size);
         cudaMemcpy(shift16_h, shift16_d, size*sizeof(__half), cudaMemcpyDeviceToHost);
 
         scales16_h = new __half[size];
-        cudaMalloc(&scales16_d, size*sizeof(__half));
+        cudaMalloc((void **) &scales16_d, size*sizeof(__half));
         float2half(scales_d, scales16_d, size);
         cudaMemcpy(scales16_h, scales16_d, size*sizeof(__half), cudaMemcpyDeviceToHost);
 

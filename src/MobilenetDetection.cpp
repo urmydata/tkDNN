@@ -159,9 +159,9 @@ bool MobilenetDetection::init(const std::string& tensor_path, const int n_classe
     generate_ssd_priors(specs, N_SSDSPEC);
 
 #ifndef OPENCV_CUDACONTRIB
-    checkCuda(cudaMallocHost(&input, sizeof(dnnType) * netRT->input_dim.tot() * nBatches));
+    checkCuda(cudaMallocHost((void **) &input, sizeof(dnnType) * netRT->input_dim.tot() * nBatches));
 #endif
-    checkCuda(cudaMalloc(&input_d, sizeof(dnnType) * netRT->input_dim.tot() * nBatches));
+    checkCuda(cudaMalloc((void **) &input_d, sizeof(dnnType) * netRT->input_dim.tot() * nBatches));
 
     locations_h = (float *)malloc(N_COORDS * nPriors * sizeof(float));
     confidences_h = (float *)malloc(nPriors * classes * sizeof(float));

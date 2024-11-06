@@ -47,7 +47,7 @@ Yolo::Yolo(Network *net, int classes, int num, std::string fname_weights, int n_
     output_dim.w = input_dim.w;
     output_dim.l = input_dim.l;
 
-    checkCuda( cudaMalloc(&dstData, output_dim.tot()*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &dstData, output_dim.tot()*sizeof(dnnType)) );
     predictions = nullptr;
 }
 

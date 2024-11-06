@@ -61,8 +61,8 @@ class DepthNN {
             netRT = new tk::dnn::NetworkRT(NULL, (tensor_path).c_str());
             
             //allocate memory for NN input
-            checkCuda(cudaMallocHost(&input_h, sizeof(dnnType) * netRT->input_dim.tot() * nBatches));
-            checkCuda(cudaMalloc(&input_d, sizeof(dnnType) * netRT->input_dim.tot() * nBatches));
+            checkCuda(cudaMallocHost((void **)&input_h, sizeof(dnnType) * netRT->input_dim.tot() * nBatches));
+            checkCuda(cudaMalloc((void **)&input_d, sizeof(dnnType) * netRT->input_dim.tot() * nBatches));
 
             //allocate memory for NN output
             depthMats.resize(nBatches);

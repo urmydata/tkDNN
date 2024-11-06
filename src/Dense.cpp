@@ -14,7 +14,7 @@ Dense::Dense(Network *net, int out_ch, std::string fname_weights) :
     output_dim.l = 1;
 
     //allocate data for infer result
-    checkCuda( cudaMalloc(&dstData, output_dim.tot()*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &dstData, output_dim.tot()*sizeof(dnnType)) );
 }
 
 Dense::~Dense() {

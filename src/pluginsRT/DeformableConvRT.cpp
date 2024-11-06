@@ -40,12 +40,12 @@ DeformableConvRT::DeformableConvRT(int chunk_dim, int kh, int kw, int sh, int sw
     this->width_ones = width_ones;
     this->dim_ones = dim_ones;
 
-    checkCuda( cudaMalloc(&data_d, i_c * o_c * kh * kw * 1 * sizeof(dnnType)));
-    checkCuda( cudaMalloc(&bias2_d, o_c*sizeof(dnnType)));
-    checkCuda( cudaMalloc(&ones_d1, height_ones * width_ones * sizeof(dnnType)));
-    checkCuda( cudaMalloc(&offset, 2*chunk_dim*sizeof(dnnType)));
-    checkCuda( cudaMalloc(&mask, chunk_dim*sizeof(dnnType)));
-    checkCuda( cudaMalloc(&ones_d2, dim_ones*sizeof(dnnType)));
+    checkCuda( cudaMalloc((void **)&data_d, i_c * o_c * kh * kw * 1 * sizeof(dnnType)));
+    checkCuda( cudaMalloc((void **)&bias2_d, o_c*sizeof(dnnType)));
+    checkCuda( cudaMalloc((void **)&ones_d1, height_ones * width_ones * sizeof(dnnType)));
+    checkCuda( cudaMalloc((void **)&offset, 2*chunk_dim*sizeof(dnnType)));
+    checkCuda( cudaMalloc((void **)&mask, chunk_dim*sizeof(dnnType)));
+    checkCuda( cudaMalloc((void **)&ones_d2, dim_ones*sizeof(dnnType)));
     if(!data_d_v.empty() && !bias2_d_v.empty() && !ones_d1_v.empty() && !ones_d2_v.empty() && !mask_v.empty() && !offset_v.empty()) {
         checkCuda(cudaMemcpy(data_d, data_d_v.data(), sizeof(dnnType) * data_d_v.size(), cudaMemcpyHostToDevice));
         checkCuda(cudaMemcpy(bias2_d, bias2_d_v.data(), sizeof(dnnType) * bias2_d_v.size(), cudaMemcpyHostToDevice));

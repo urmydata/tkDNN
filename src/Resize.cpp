@@ -19,7 +19,7 @@ Resize::Resize(Network *net, int scale_c, int scale_h, int scale_w, bool fixed, 
         output_dim.w *= scale_w;
     }
 
-    checkCuda( cudaMalloc(&dstData, output_dim.tot()*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &dstData, output_dim.tot()*sizeof(dnnType)) );
 }
 
 Resize::~Resize() {

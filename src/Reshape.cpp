@@ -7,7 +7,7 @@ namespace tk { namespace dnn {
 
 Reshape::Reshape(Network *net, dataDim_t new_dim) : Layer(net) {
 
-    checkCuda( cudaMalloc(&dstData, input_dim.tot()*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &dstData, input_dim.tot()*sizeof(dnnType)) );
     this->n = new_dim.n;
     this->c = new_dim.c;
     this->h = new_dim.h;

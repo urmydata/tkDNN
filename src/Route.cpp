@@ -37,7 +37,7 @@ Route::Route(Network *net, Layer **layers, int layers_n, int groups, int group_i
     output_dim.c /= this->groups;
     input_dim = output_dim;
 
-    checkCuda( cudaMalloc(&dstData, output_dim.tot()*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &dstData, output_dim.tot()*sizeof(dnnType)) );
 }
 
 Route::~Route() {

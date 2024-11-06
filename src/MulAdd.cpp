@@ -17,12 +17,12 @@ MulAdd::MulAdd(Network *net, dnnType mul, dnnType add) : Layer(net) {
     for(int i=0; i<size; i++)
         add_vector_h[i] = add;
 
-    checkCuda( cudaMalloc(&add_vector, size*sizeof(dnnType)));
+    checkCuda( cudaMalloc((void **) &add_vector, size*sizeof(dnnType)));
     checkCuda( cudaMemcpy(add_vector, add_vector_h, size*sizeof(dnnType), cudaMemcpyHostToDevice));
     delete [] add_vector_h;
 
 
-    checkCuda( cudaMalloc(&dstData, input_dim.tot()*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &dstData, input_dim.tot()*sizeof(dnnType)) );
 }
 
 MulAdd::~MulAdd() {

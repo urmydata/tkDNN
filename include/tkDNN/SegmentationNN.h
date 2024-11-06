@@ -162,15 +162,15 @@ class SegmentationNN {
             classes = n_classes;
             nBatches = n_batches;
 
-            checkCuda(cudaMallocHost(&input, sizeof(dnnType) * netRT->input_dim.tot() * nBatches));
-            checkCuda(cudaMalloc(&input_d, sizeof(dnnType) * netRT->input_dim.tot() * nBatches));
+            checkCuda(cudaMallocHost((void **)&input, sizeof(dnnType) * netRT->input_dim.tot() * nBatches));
+            checkCuda(cudaMalloc((void **)&input_d, sizeof(dnnType) * netRT->input_dim.tot() * nBatches));
 
             dataDim_t odim = netRT->output_dim;
 
-            checkCuda(cudaMallocHost(&confidences_h, sizeof(float) * odim.tot()));
-            checkCuda(cudaMalloc(&tmpInputData_d, sizeof(float) * odim.tot()));
-            checkCuda(cudaMalloc(&tmpOutData_d, sizeof(float) * odim.w*odim.h));
-            checkCuda(cudaMallocHost(&tmpOutData_h, sizeof(float) * odim.w*odim.h));
+            checkCuda(cudaMallocHost((void **)&confidences_h, sizeof(float) * odim.tot()));
+            checkCuda(cudaMalloc((void **)&tmpInputData_d, sizeof(float) * odim.tot()));
+            checkCuda(cudaMalloc((void **)&tmpOutData_d, sizeof(float) * odim.w*odim.h));
+            checkCuda(cudaMallocHost((void **)&tmpOutData_h, sizeof(float) * odim.w*odim.h));
 
             segmented.resize(nBatches);
             originalSize.resize(nBatches);
@@ -178,8 +178,8 @@ class SegmentationNN {
             std::vector<float> mean = {0.485, 0.456, 0.406};
             std::vector<float> stddev = {0.229, 0.224, 0.225};
 
-            checkCuda(cudaMalloc(&mean_d, sizeof(float) * mean.size()));
-            checkCuda(cudaMalloc(&stddev_d, sizeof(float) * stddev.size()));
+            checkCuda(cudaMalloc((void **)&mean_d, sizeof(float) * mean.size()));
+            checkCuda(cudaMalloc((void **)&stddev_d, sizeof(float) * stddev.size()));
 
             checkCuda(cudaMemcpyAsync(mean_d, mean.data(), mean.size() * sizeof(float), cudaMemcpyHostToDevice, netRT->stream));
             checkCuda(cudaMemcpyAsync(stddev_d, stddev.data(), stddev.size() * sizeof(float), cudaMemcpyHostToDevice, netRT->stream));

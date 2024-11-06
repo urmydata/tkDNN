@@ -59,21 +59,21 @@ LayerWgs::LayerWgs(Network *net, int inputs, int outputs,
     //convert to fp16
     int w_size = inputs*outputs*kh*kw*kl;
     data16_h = new __half[w_size];
-    cudaMalloc(&data16_d, w_size*sizeof(__half));
+    cudaMalloc((void **) &data16_d, w_size*sizeof(__half));
     float2half(data_d, data16_d, w_size);
     cudaMemcpy(data16_h, data16_d, w_size*sizeof(__half), cudaMemcpyDeviceToHost);
 
     if(additional_bias){
         int b2_size = outputs;
         bias216_h = new __half[b2_size];
-        cudaMalloc(&bias216_d, w_size*sizeof(__half));
+        cudaMalloc((void **) &bias216_d, w_size*sizeof(__half));
         float2half(bias2_d, bias216_d, b2_size);
         cudaMemcpy(bias216_h, bias216_d, b2_size*sizeof(__half), cudaMemcpyDeviceToHost);
     }
 
     int b_size = outputs;
     bias16_h = new __half[b_size];
-    cudaMalloc(&bias16_d, w_size*sizeof(__half));
+    cudaMalloc((void **) &bias16_d, w_size*sizeof(__half));
     float2half(bias_d, bias16_d, b_size);
     cudaMemcpy(bias16_h, bias16_d, b_size*sizeof(__half), cudaMemcpyDeviceToHost);
 
@@ -84,14 +84,14 @@ LayerWgs::LayerWgs(Network *net, int inputs, int outputs,
         variance16_h = new __half[b_size];
         scales16_h   = new __half[b_size];
 
-        cudaMalloc(&power16_d, b_size*sizeof(__half));
-        cudaMalloc(&mean16_d, b_size*sizeof(__half));
-        cudaMalloc(&variance16_d, b_size*sizeof(__half));
-        cudaMalloc(&scales16_d, b_size*sizeof(__half));
+        cudaMalloc((void **) &power16_d, b_size*sizeof(__half));
+        cudaMalloc((void **) &mean16_d, b_size*sizeof(__half));
+        cudaMalloc((void **) &variance16_d, b_size*sizeof(__half));
+        cudaMalloc((void **) &scales16_d, b_size*sizeof(__half));
 
         //temporary buffers
         float *tmp_d;
-        cudaMalloc(&tmp_d, b_size*sizeof(float));
+        cudaMalloc((void **) &tmp_d, b_size*sizeof(float));
 
         //init power array of ones
         cudaMemcpy(tmp_d, power_h, b_size*sizeof(float), cudaMemcpyHostToDevice);

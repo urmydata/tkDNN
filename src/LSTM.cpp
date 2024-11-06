@@ -65,10 +65,10 @@ LSTM::LSTM( Network *net, int hiddensize, bool returnSeq, std::string fname_weig
     checkCUDNN(cudnnSetTensorNdDescriptor(cy_desc_, net->dataType, 3, dimA, strideA));
     // allocate     dnnType *hx_ptr, *cx_ptr, *hy_ptr, *cy_ptr;
     stateDataDim = dimA[0]*dimA[1]*dimA[2];
-    checkCuda( cudaMalloc(&hx_ptr, stateDataDim*sizeof(dnnType)) );
-    checkCuda( cudaMalloc(&cx_ptr, stateDataDim*sizeof(dnnType)) );
-    checkCuda( cudaMalloc(&hy_ptr, stateDataDim*sizeof(dnnType)) );
-    checkCuda( cudaMalloc(&cy_ptr, stateDataDim*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &hx_ptr, stateDataDim*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &cx_ptr, stateDataDim*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &hy_ptr, stateDataDim*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &cy_ptr, stateDataDim*sizeof(dnnType)) );
     
 
 
@@ -77,7 +77,7 @@ LSTM::LSTM( Network *net, int hiddensize, bool returnSeq, std::string fname_weig
     checkCUDNN(cudnnCreateDropoutDescriptor(&dropoutDesc));
     checkCUDNN(cudnnDropoutGetStatesSize(net->cudnnHandle, &dropout_byte_));
     dropout_size_ = dropout_byte_ / sizeof(dnnType);
-    checkCuda( cudaMalloc(&dropout_states_, dropout_byte_) );
+    checkCuda( cudaMalloc((void **) &dropout_states_, dropout_byte_) );
     uint64_t seed_ = 17 + rand() % 4096;  // NOLINT(runtime/threadsafe_fn)
     checkCUDNN(cudnnSetDropoutDescriptor(dropoutDesc,
         net->cudnnHandle, dropoutprob, dropout_states_, dropout_byte_, seed_));
@@ -86,7 +86,18 @@ LSTM::LSTM( Network *net, int hiddensize, bool returnSeq, std::string fname_weig
     // RNN descriptors
     checkCUDNN(cudnnCreateRNNDescriptor(&rnnDesc));
 
-#if CUDNN_MAJOR > 7
+#if CUDNN_MAJOR > 8
+    checkCUDNN(cudnnSetRNNDescriptor_v8(rnnDesc,
+	                                    cudnnRNNAlgo_t::CUDNN_RNN_ALGO_STANDARD,
+                                        cudnnRNNMode_t::CUDNN_LSTM,
+										cudnnRNNBiasMode_t::CUDNN_RNN_DOUBLE_BIAS,
+                                        cudnnDirectionMode_t::CUDNN_UNIDIRECTIONAL,
+                                        cudnnRNNInputMode_t::CUDNN_LINEAR_INPUT,
+                                        net->dataType,
+                                        net->dataType,
+                                        cudnnMathType_t::CUDNN_DEFAULT_MATH,
+										inputSize, stateSize, stateSize, numLayers, dropoutDesc, CUDNN_RNN_PADDED_IO_DISABLED));
+#elif CUDNN_MAJOR > 7
     checkCUDNN(cudnnSetRNNDescriptor_v6(net->cudnnHandle,rnnDesc, stateSize, numLayers, dropoutDesc,
                                         cudnnRNNInputMode_t::CUDNN_LINEAR_INPUT,
             //(bidirectional ? cudnnDirectionMode_t::CUDNN_BIDIRECTIONAL : cudnnDirectionMode_t::CUDNN_UNIDIRECTIONAL),
@@ -106,16 +117,35 @@ LSTM::LSTM( Network *net, int hiddensize, bool returnSeq, std::string fname_weig
 
 
     // Get temp space sizes
+#if CUDNN_MAJOR > 8
+	cudnnRNNDataDescriptor_t xDesc;
+	size_t reserve_bytes = 0;
+	int seqLengthArray[batchSize];
+	for(int i = 0 ; i < batchSize ; i++) {
+		seqLengthArray[i] = seqLen;
+	}
+	// This code is not tested yet, so the implementation is incorrect. (This code is just added for avoiding compiler errors)
+	checkCUDNN(cudnnCreateRNNDataDescriptor(&xDesc));
+	checkCUDNN(cudnnSetRNNDataDescriptor(xDesc, net->dataType, CUDNN_RNN_DATA_LAYOUT_SEQ_MAJOR_UNPACKED, seqLen, batchSize, inputSize, seqLengthArray, NULL));
+    checkCUDNN(cudnnGetRNNTempSpaceSizes(net->cudnnHandle,
+        rnnDesc, cudnnForwardMode_t::CUDNN_FWD_MODE_INFERENCE, xDesc, &workspace_byte_, &reserve_bytes));
+#else
     checkCUDNN(cudnnGetRNNWorkspaceSize(net->cudnnHandle,
         rnnDesc, seqLen, x_desc_vec_.data(), &workspace_byte_));
+#endif
+
     workspace_size_ = workspace_byte_ / sizeof(dnnType);
-    checkCuda( cudaMalloc(&work_space_, workspace_byte_) );    
+    checkCuda( cudaMalloc((void **) &work_space_, workspace_byte_) );
     
 
     // Check that number of params are correct
     size_t cudnn_param_size;
+#if CUDNN_MAJOR > 8
+	checkCUDNN(cudnnGetRNNWeightSpaceSize(net->cudnnHandle, rnnDesc, &cudnn_param_size));
+#else
     checkCUDNN(cudnnGetRNNParamsSize(net->cudnnHandle,
         rnnDesc,x_desc_vec_[0], &cudnn_param_size, net->dataType));
+#endif
     int cudnn_params = cudnn_param_size/sizeof(dnnType);
     //std::cout<<"LSTM params size: "<<cudnn_params << ", bytes: "<<cudnn_param_size<<"\n";
 
@@ -145,16 +175,16 @@ LSTM::LSTM( Network *net, int hiddensize, bool returnSeq, std::string fname_weig
     }
 
     //allocate data for infer result
-    checkCuda( cudaMalloc(&dstData, output_dim.tot()*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &dstData, output_dim.tot()*sizeof(dnnType)) );
 
     // used during inference
     one_output_dim = input_dim;
     one_output_dim.c = stateSize;
-    checkCuda( cudaMalloc(&srcF, input_dim.tot()*sizeof(dnnType)) );
-    checkCuda( cudaMalloc(&srcB, input_dim.tot()*sizeof(dnnType)) );
-    checkCuda( cudaMalloc(&dstF, one_output_dim.tot()*sizeof(dnnType)) );
-    checkCuda( cudaMalloc(&dstB_NR, one_output_dim.tot()*sizeof(dnnType)) );
-    checkCuda( cudaMalloc(&dstB, one_output_dim.tot()*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &srcF, input_dim.tot()*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &srcB, input_dim.tot()*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &dstF, one_output_dim.tot()*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &dstB_NR, one_output_dim.tot()*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &dstB, one_output_dim.tot()*sizeof(dnnType)) );
 
 
     /*
@@ -255,6 +285,10 @@ dnnType* LSTM::infer(dataDim_t &dim, dnnType* srcData) {
         checkCuda( cudaMemset(cx_ptr, 0, stateDataDim*sizeof(float)) );
 
 
+
+#if CUDNN_MAJOR > 8
+		// Not implemented yet
+#else
         checkCUDNN(cudnnRNNForwardInference(net->cudnnHandle,
             rnnDesc,
             seqLen,                     // number of time steps (nT)
@@ -274,6 +308,7 @@ dnnType* LSTM::infer(dataDim_t &dim, dnnType* srcData) {
             cy_ptr,                     // final cell state pointer   
             work_space_,                // workspace pointer
             workspace_byte_));          // workspace size    
+#endif
     }
 
     // backward
@@ -282,6 +317,9 @@ dnnType* LSTM::infer(dataDim_t &dim, dnnType* srcData) {
         checkCuda( cudaMemset(hx_ptr, 0, stateDataDim*sizeof(float)) );	
         checkCuda( cudaMemset(cx_ptr, 0, stateDataDim*sizeof(float)) );
 
+#if CUDNN_MAJOR > 8
+		// Not implemented yet
+#else
         checkCUDNN(cudnnRNNForwardInference(net->cudnnHandle,
             rnnDesc,
             seqLen,                     // number of time steps (nT)
@@ -301,6 +339,8 @@ dnnType* LSTM::infer(dataDim_t &dim, dnnType* srcData) {
             cy_ptr,                     // final cell state pointer   
             work_space_,                // workspace pointer
             workspace_byte_));          // workspace size    
+#endif
+
     }
 
 

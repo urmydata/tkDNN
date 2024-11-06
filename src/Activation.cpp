@@ -11,7 +11,7 @@ Activation::Activation(Network *net, int act_mode, const float ceiling, const fl
     this->act_mode  = act_mode;
     this->ceiling   = ceiling;
     this->slope     = slope;
-    checkCuda( cudaMalloc(&dstData, input_dim.tot()*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) &dstData, input_dim.tot()*sizeof(dnnType)) );
 
     if(int(act_mode) < 100) {
 

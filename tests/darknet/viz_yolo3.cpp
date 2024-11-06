@@ -24,7 +24,7 @@ int main(int argc, char *argv[]) {
 
     // input data
     dnnType *input_d;
-    checkCuda( cudaMalloc(&input_d, sizeof(dnnType)*net->input_dim.tot()));
+    checkCuda( cudaMalloc((void **)&input_d, sizeof(dnnType)*net->input_dim.tot()));
 
     // load image
     cv::Mat frame, frameFloat;

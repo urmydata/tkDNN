@@ -39,9 +39,9 @@ namespace tk { namespace dnn {
 
     dets = tk::dnn::Yolo::allocateDetections(tk::dnn::Yolo::MAX_DETECTIONS, classes);
 #ifndef OPENCV_CUDACONTRIB
-    checkCuda(cudaMallocHost(&input, sizeof(dnnType)*idim.tot()));
+    checkCuda(cudaMallocHost((void **) &input, sizeof(dnnType)*idim.tot()));
 #endif
-    checkCuda(cudaMalloc(&input_d, sizeof(dnnType)*idim.tot()));
+    checkCuda(cudaMalloc((void **) &input_d, sizeof(dnnType)*idim.tot()));
 
     // class colors precompute    
     for(int c=0; c<classes; c++) {

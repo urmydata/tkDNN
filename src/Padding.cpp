@@ -20,7 +20,7 @@ namespace tk{ namespace dnn {
         }else{
             this->constant = 0;
         }
-        checkCuda(cudaMalloc(&dstData,output_dim.tot()*sizeof(dnnType)));
+        checkCuda(cudaMalloc((void **) &dstData,output_dim.tot()*sizeof(dnnType)));
     }
 
     Padding::~Padding() {

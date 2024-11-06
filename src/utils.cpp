@@ -79,7 +79,7 @@ void readBinaryFile(std::string fname, int size, dnnType** data_h, dnnType** dat
         FatalError(error_s.str());
     }
     
-    checkCuda( cudaMalloc(data_d, size_b) );
+    checkCuda( cudaMalloc((void **) data_d, size_b) );
     checkCuda( cudaMemcpy(*data_d, *data_h, size_b, cudaMemcpyHostToDevice) );
 }
 
@@ -165,7 +165,7 @@ float getColor(const int c, const int x, const int max){
 void resize(int size, dnnType **data){
     if (*data != NULL)
         checkCuda( cudaFree(*data) );
-    checkCuda( cudaMalloc(data, size*sizeof(dnnType)) );
+    checkCuda( cudaMalloc((void **) data, size*sizeof(dnnType)) );
 }
 
 void matrixTranspose(cublasHandle_t handle, dnnType* srcData, dnnType* dstData, int rows, int cols) {
